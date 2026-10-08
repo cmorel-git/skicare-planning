@@ -20,9 +20,9 @@ const TCLS={'À faire':'s-idee','En cours':'s-wip','Bloqué':'s-late','Fait':'s-
 const MONTHS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const DOW=['lun','mar','mer','jeu','ven','sam','dim'];
 
-const S={posts:new Map(),todos:new Map(),members:new Map(),me:null,view:'weeks',month:null,ready:false,
+const S={posts:new Map(),todos:new Map(),members:new Map(),me:null,view:'themes',month:null,metaMonth:null,ready:false,
   todoFilter:'open',who:'all',calY:null,calM:null,showSubs:true,canal:'all',drawerPost:null};
-try{const v=localStorage.getItem('sc_view');if(v)S.view=v;const w=localStorage.getItem('sc_who');if(w)S.who=w;if(localStorage.getItem('sc_subs')==='0')S.showSubs=false;const c=localStorage.getItem('sc_canal');if(c)S.canal=c;}catch(e){}
+try{const v=localStorage.getItem('sc_view');if(v)S.view=(v==='weeks'?'themes':v);const w=localStorage.getItem('sc_who');if(w)S.who=w;if(localStorage.getItem('sc_subs')==='0')S.showSubs=false;const c=localStorage.getItem('sc_canal');if(c)S.canal=c;}catch(e){}
 
 const $=s=>document.querySelector(s);
 const el=(tag,attrs={},...kids)=>{const e=document.createElement(tag);for(const[k,v]of Object.entries(attrs)){if(v==null||v===false)continue;if(k==='class')e.className=v;else if(k==='style')e.style.cssText=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else e.setAttribute(k,v===true?'':v);}for(const c of kids.flat()){if(c==null||c===false)continue;e.append(c.nodeType?c:document.createTextNode(String(c)));}return e;};
@@ -36,6 +36,8 @@ const mName=id=>(id&&S.members.get(id)?.name)||'';
 const activeMembers=()=>[...S.members.values()].filter(m=>m.active).sort((a,b)=>a.name.localeCompare(b.name));
 const tStat=t=>TSTAT.includes(t.statut)?t.statut:'À faire';
 const isDone=t=>tStat(t)==='Fait';
+const eur=n=>(Number(n)||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+const dayCount=(a,b)=>Math.round((pd(b)-pd(a))/864e5)+1;
 const subsFor=pid=>[...S.todos.values()].filter(t=>t.post_id===pid).sort((a,b)=>(isDone(a)-isDone(b))||(a.due||'9999').localeCompare(b.due||'9999')||(a.created_at||'').localeCompare(b.created_at||''));
 function toast(msg){const t=el('div',{class:'toast',role:'status'},msg);$('#toastHost').replaceChildren(t);setTimeout(()=>t.remove(),2400);}
 function memberSelect(id,value,label,extra={}){
@@ -87,7 +89,7 @@ function subscribe(){
 /* ---------- rendu ---------- */
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{S.view=b.dataset.view;try{localStorage.setItem('sc_view',S.view)}catch(e){}render();}));
 $('#newPost').addEventListener('click',()=>openPost(null));
-function legend(){$('#legend').replaceChildren(...RUBS.map(r=>el('span',{},el('i',{class:'dot',style:`--rc:var(${r.c})`}),r.l)));}
+function legend(){$('#legend').replaceChildren();}
 
 function render(){
   document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.view===S.view)));
@@ -95,11 +97,12 @@ function render(){
   $('#todoBadge').textContent=open?`(${open})`:'';
   const v=$('#view');
   if(!S.ready){v.replaceChildren(el('div',{class:'empty'},'Chargement du planning…'));return;}
-  const keep=[...v.querySelectorAll('input[id],select[id],textarea[id]')].filter(n=>n.dataset.dirty||n.id.startsWith('t')||n.id.startsWith('m')).map(n=>[n.id,n.value]);
+  const keep=[...v.querySelectorAll('input[id],select[id],textarea[id]')].filter(n=>n.dataset.dirty||n.id.startsWith('t')||n.id==='mName'||n.id==='mEmail').map(n=>[n.id,n.value]);
   const ae=document.activeElement;const focused=ae&&v.contains(ae)?ae.id:null;
   const sel=focused&&ae.selectionStart!=null?[ae.selectionStart,ae.selectionEnd]:null;
   const sy=window.scrollY;
-  if(S.view==='weeks')v.replaceChildren(renderWeeks());
+  if(S.view==='themes')v.replaceChildren(renderThemes());
+  else if(S.view==='meta')v.replaceChildren(renderMeta());
   else if(S.view==='month')v.replaceChildren(renderMonth());
   else if(S.view==='team')v.replaceChildren(renderTeam());
   else v.replaceChildren(renderTodos());
@@ -108,10 +111,11 @@ function render(){
   window.scrollTo(0,sy);
 }
 
-/* ---------- semaines ---------- */
+/* ---------- thématiques ---------- */
 const canalOk=p=>S.canal==='all'||(p.canal||'Instagram')===S.canal;
 function monthKeys(){const set=new Set();for(const p of S.posts.values()){if(p.date)set.add(p.date.slice(0,7));}return [...set].sort();}
-function renderWeeks(){
+const monthLabel=k=>{const[y,m]=k.split('-');return `${MONTHS[+m-1]} ${y}`;};
+function renderThemes(){
   const frag=el('div',{class:'weeks'});
   const keys=monthKeys();const nowKey=iso(today()).slice(0,7);
   if(S.month==null){S.month=keys.find(k=>k>=nowKey)||keys[keys.length-1]||'all';}
@@ -119,45 +123,40 @@ function renderWeeks(){
   frag.append(el('div',{class:'months'},
     el('button',{class:'chip','aria-pressed':String(S.month==='all'),onclick:()=>{S.month='all';render();}},'Tout'),
     ...keys.map(k=>{const[y,m]=k.split('-');return el('button',{class:'chip','aria-pressed':String(S.month===k),onclick:()=>{S.month=k;render();}},`${MONTHS[+m-1]} ${y.slice(2)}`);}),
-    hasIdeas?el('button',{class:'chip','aria-pressed':String(S.month==='ideas'),onclick:()=>{S.month='ideas';render();}},'Idées sans date'):null,
+    hasIdeas?el('button',{class:'chip','aria-pressed':String(S.month==='ideas'),onclick:()=>{S.month='ideas';render();}},'Sans date'):null,
     el('select',{id:'canalFilter',class:'chip subs-toggle','aria-label':'Canal',onchange:e=>{S.canal=e.target.value;try{localStorage.setItem('sc_canal',S.canal)}catch(_){}render();}},
       el('option',{value:'all'},'Tous les canaux'),...CANAUX.map(c=>el('option',{value:c,selected:S.canal===c?true:null},c))),
     el('button',{class:'chip','aria-pressed':String(S.showSubs),onclick:()=>{S.showSubs=!S.showSubs;try{localStorage.setItem('sc_subs',S.showSubs?'1':'0')}catch(e){}render();}},S.showSubs?'Sous-tâches affichées':'Sous-tâches masquées')));
-  if(S.posts.size===0){frag.append(el('div',{class:'empty'},'Aucun post pour l’instant. Ajoute le premier avec « + Nouveau post ».'));return frag;}
+  if(S.posts.size===0){frag.append(el('div',{class:'empty'},'Aucune thématique pour l’instant. Ajoute la première avec « + Nouvelle thématique ».'));return frag;}
   if(S.month==='ideas'){
     const ideas=[...S.posts.values()].filter(p=>!p.date&&canalOk(p)).sort((a,b)=>(a.title||'').localeCompare(b.title||''));
-    frag.append(el('section',{class:'week'},el('div',{class:'week-h'},el('h3',{},'Idées à caler'),el('span',{class:'quota ok'},`${ideas.length} idée${ideas.length>1?'s':''}`)),el('div',{class:'rows'},ideas.map(rowFor))));
+    frag.append(el('section',{class:'week'},el('div',{class:'week-h'},el('h3',{},'Thématiques sans date'),el('span',{class:'quota ok'},`${ideas.length}`)),el('div',{class:'rows'},ideas.map(rowFor))));
     return frag;
   }
   const dated=[...S.posts.values()].filter(p=>p.date&&canalOk(p)&&(S.month==='all'||p.date.startsWith(S.month))).sort((a,b)=>a.date.localeCompare(b.date)||(a.title||'').localeCompare(b.title||''));
-  if(!dated.length){frag.append(el('div',{class:'empty'},'Aucun post daté sur cette période.'));return frag;}
+  if(!dated.length){frag.append(el('div',{class:'empty'},'Aucune thématique datée sur cette période.'));return frag;}
   const groups=new Map();
-  for(const p of dated){const k=iso(monday(pd(p.date)));if(!groups.has(k))groups.set(k,[]);groups.get(k).push(p);}
-  const insta=[...S.posts.values()].filter(p=>p.date&&(p.canal||'Instagram')==='Instagram');
-  const curMon=iso(monday(today()));
+  for(const p of dated){const k=p.date.slice(0,7);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(p);}
   for(const[k,list]of groups){
-    const mon=pd(k);const sun=new Date(mon);sun.setDate(mon.getDate()+6);
-    const n=insta.filter(p=>iso(monday(pd(p.date)))===k).length;
-    frag.append(el('section',{class:'week'+(k===curMon?' current':'')},
-      el('div',{class:'week-h'},
-        el('h3',{},`Semaine du ${fmtShort(mon)} au ${fmtShort(sun)}`+(k===curMon?' · cette semaine':'')),
-        el('span',{class:'quota '+(n>=4?'ok':'low'),title:'Objectif : 4 publications Instagram minimum par semaine'},`${n} / 4 posts Insta`)),
+    frag.append(el('section',{class:'week'+(k===nowKey?' current':'')},
+      el('div',{class:'week-h'},el('h3',{},monthLabel(k)),el('span',{class:'quota ok'},`${list.length} thématique${list.length>1?'s':''}`)),
       el('div',{class:'rows'},list.map(rowFor))));
   }
   return frag;
 }
 function rowFor(p){
-  const r=rub(p.rubrique);const d=pd(p.date);
+  const d=pd(p.date);
   const tds=subsFor(p.id);const openT=tds.filter(t=>!isDone(t)).length;
-  const row=el('button',{class:'row'+(p.rubrique==='temps-fort'?' tf':''),onclick:()=>openPost(p.id)},
+  const metas=tds.filter(t=>t.meta);const metaBudget=metas.reduce((s,t)=>s+(Number(t.meta_budget)||0),0);
+  const row=el('button',{class:'row',onclick:()=>openPost(p.id)},
     el('div',{class:'d'},d?[el('b',{},fmtShort(d)),DOW[(d.getDay()+6)%7]]:el('b',{},'—')),
     el('div',{class:'t'},p.title||'Sans titre',p.objectif?el('small',{},p.objectif):null),
-    el('div',{class:'rubcell'},el('span',{class:'rub'},el('i',{class:'dot',style:`--rc:var(${r.c})`}),r.l),(p.canal&&p.canal!=='Instagram')?el('div',{class:'owner'},p.canal):null),
-    el('div',{class:'f'},p.format||''),
+    el('div',{class:'f'},el('div',{},p.canal||'Instagram'),p.format?el('div',{},p.format):null),
     el('div',{class:'meta'},
       el('span',{class:'status '+(SCLASS[p.statut]||'s-idee')},p.statut||'Idée'),
       p.owner_id?el('span',{class:'owner'},mName(p.owner_id)):null,
-      tds.length?el('span',{class:'tcount'},`${tds.length-openT}/${tds.length} sous-tâches`):null));
+      tds.length?el('span',{class:'tcount'},`${tds.length-openT}/${tds.length} sous-tâches`):null,
+      metas.length?el('span',{class:'metapill'},`Meta · ${eur(metaBudget)}`):null));
   if(!S.showSubs)return el('div',{class:'post'},row);
   const subs=el('div',{class:'subs'},tds.map(t=>subRow(t)));
   subs.append(addSubForm(p.id));
@@ -170,7 +169,7 @@ function addSubForm(pid,inDrawer){
     el('button',{class:'btn',type:'submit'},'Ajouter'));
 }
 function subRow(t,showPost){
-  const st=tStat(t);const t0=iso(today());
+  const st=tStat(t);const t0=iso(today());const isMeta=!!t.meta;
   const late=!isDone(t)&&t.due&&t.due<t0;
   const enter=e=>{if(e.key==='Enter'){e.preventDefault();e.target.blur();}};
   const p=showPost&&t.post_id?S.posts.get(t.post_id):null;
@@ -179,6 +178,7 @@ function subRow(t,showPost){
     el('input',{type:'text',class:'txt',id:'sx-'+t.id,value:t.text||'','aria-label':'Sous-tâche',onkeydown:enter,oninput:e=>{e.target.dataset.dirty='1';},
       onchange:e=>{const v=e.target.value.trim();delete e.target.dataset.dirty;if(!v){e.target.value=t.text;return;}if(v!==t.text)updateTodo(t.id,{text:v});}}),
     memberSelect('sa-'+t.id,t.assignee_id,'Responsable',{class:'who-in',onchange:e=>updateTodo(t.id,{assignee_id:e.target.value||null})}),
+    isMeta?el('span',{class:'due-in metapill',title:'Pub Meta : dates de diffusion ci-dessous'},'Pub Meta'):
     el('input',{type:'date',class:'due-in'+(late?' late':''),id:'sd-'+t.id,value:t.due||'','aria-label':'Échéance',title:late?'En retard':'Échéance',onkeydown:enter,
       onchange:e=>{const v=e.target.value||null;if(v!==t.due)updateTodo(t.id,{due:v});}}),
     el('button',{class:'x',type:'button','aria-label':'Supprimer la sous-tâche',title:'Supprimer',onclick:e=>delInline(e.currentTarget,()=>removeTodo(t.id))},'×'),
@@ -187,7 +187,18 @@ function subRow(t,showPost){
         onchange:e=>{const v=e.target.value.trim();delete e.target.dataset.dirty;if(v!==(t.format||''))updateTodo(t.id,{format:v});}}),
       autoGrow(el('textarea',{class:'cnt',id:'sc-'+t.id,rows:'1',placeholder:'Contenu (texte, légende, brief, liens…)','aria-label':'Contenu',oninput:e=>{e.target.dataset.dirty='1';fit(e.target);},
         onchange:e=>{const v=e.target.value.trim();delete e.target.dataset.dirty;if(v!==(t.contenu||''))updateTodo(t.id,{contenu:v});}}),t.contenu||'')),
-    p?el('button',{class:'postlink',type:'button',onclick:()=>openPost(p.id)},'↳ '+(p.date?fmtShort(pd(p.date))+' · ':'')+(p.title||'post')):null);
+    el('div',{class:'st-meta'+(isMeta?' on':'')},
+      el('label',{class:'metachk'},el('input',{type:'checkbox',id:'sm-'+t.id,checked:isMeta?true:null,onchange:e=>updateTodo(t.id,{meta:e.target.checked})}),'Pub Meta'),
+      isMeta?[
+        el('label',{class:'mf'},'Du',el('input',{type:'date',id:'ms-'+t.id,value:t.meta_start||'','aria-label':'Début de diffusion',onkeydown:enter,
+          onchange:e=>{const v=e.target.value||null;if(v===t.meta_start)return;const patch={meta_start:v,due:v};if(v&&t.meta_end&&t.meta_end<v)patch.meta_end=v;updateTodo(t.id,patch);}})),
+        el('label',{class:'mf'},'au',el('input',{type:'date',id:'me2-'+t.id,value:t.meta_end||'',min:t.meta_start||null,'aria-label':'Fin de diffusion',onkeydown:enter,
+          onchange:e=>{let v=e.target.value||null;if(v&&t.meta_start&&v<t.meta_start){toast('La fin doit être après le début');e.target.value=t.meta_end||'';return;}if(v!==t.meta_end)updateTodo(t.id,{meta_end:v});}})),
+        el('label',{class:'mf'},'Budget',el('input',{type:'number',id:'mb-'+t.id,min:'0',step:'1',inputmode:'decimal',value:t.meta_budget??'',placeholder:'0','aria-label':'Budget Meta en euros',onkeydown:enter,oninput:e=>{e.target.dataset.dirty='1';},
+          onchange:e=>{delete e.target.dataset.dirty;const raw=e.target.value.replace(',','.');const v=raw===''?null:Math.max(0,Number(raw));if(raw!==''&&isNaN(v)){e.target.value=t.meta_budget??'';return;}if(v!==(t.meta_budget==null?null:Number(t.meta_budget)))updateTodo(t.id,{meta_budget:v});}}),'€'),
+        (t.meta_start&&t.meta_end)?el('span',{class:'owner'},`${dayCount(t.meta_start,t.meta_end)} j`+(t.meta_budget?` · ${eur(t.meta_budget/dayCount(t.meta_start,t.meta_end))}/j`:'')):null
+      ]:null),
+    p?el('button',{class:'postlink',type:'button',onclick:()=>openPost(p.id)},'↳ '+(p.date?fmtShort(pd(p.date))+' · ':'')+(p.title||'thématique')):null);
 }
 function fit(ta){ta.style.height='auto';ta.style.height=(ta.scrollHeight+2)+'px';}
 function autoGrow(ta,val){ta.value=val;requestAnimationFrame(()=>fit(ta));return ta;}
@@ -213,18 +224,90 @@ function renderMonth(){
     const d=new Date(start);d.setDate(start.getDate()+i);
     if(i>=35&&d.getMonth()!==S.calM)break;
     const k=iso(d);const out=d.getMonth()!==S.calM;
-    const cell=el('div',{class:'cell'+(out?' out':'')+(k===tIso?' today':''),title:'Ajouter un post ce jour',style:'cursor:copy',onclick:()=>openPost(null,k)},el('span',{class:'n'},d.getDate()));
-    for(const p of (byDate.get(k)||[])){const r=rub(p.rubrique);cell.append(el('button',{class:'ev',style:`--rc:var(${r.c})`,title:`${p.title} · ${p.statut||''}`,onclick:e=>{e.stopPropagation();openPost(p.id);}},p.title||'Sans titre'));}
+    const cell=el('div',{class:'cell'+(out?' out':'')+(k===tIso?' today':''),title:'Ajouter une thématique ce jour',style:'cursor:copy',onclick:()=>openPost(null,k)},el('span',{class:'n'},d.getDate()));
+    for(const p of (byDate.get(k)||[])){cell.append(el('button',{class:'ev',style:'--rc:var(--accent)',title:`${p.title} · ${p.statut||''}`,onclick:e=>{e.stopPropagation();openPost(p.id);}},p.title||'Sans titre'));}
     grid.append(cell);
   }
   box.append(el('div',{class:'cal-wrap'},grid));
   return box;
 }
 
+/* ---------- planning & budget Meta ---------- */
+function metaMonths(c){const out=[];if(!c.meta_start)return out;const e=c.meta_end||c.meta_start;let d=new Date(pd(c.meta_start).getFullYear(),pd(c.meta_start).getMonth(),1);const end=pd(e);while(d<=end){out.push(iso(d).slice(0,7));d=new Date(d.getFullYear(),d.getMonth()+1,1);}return out;}
+// part du budget qui tombe dans [from,to] (au prorata des jours de diffusion)
+function budgetIn(c,from,to){if(!c.meta_budget||!c.meta_start)return 0;const s0=c.meta_start,e0=c.meta_end||c.meta_start;const s1=s0>from?s0:from,e1=e0<to?e0:to;if(e1<s1)return 0;return Number(c.meta_budget)*dayCount(s1,e1)/dayCount(s0,e0);}
+const monthBounds=k=>{const[y,m]=k.split('-').map(Number);return [iso(new Date(y,m-1,1)),iso(new Date(y,m,0))];};
+function renderMeta(){
+  const box=el('div',{class:'todo-layout'});
+  const all=[...S.todos.values()].filter(t=>t.meta);
+  const keys=[...new Set(all.flatMap(metaMonths))].sort();
+  const nowKey=iso(today()).slice(0,7);
+  if(S.metaMonth==null||(S.metaMonth!=='all'&&!keys.includes(S.metaMonth)))S.metaMonth=keys.includes(nowKey)?nowKey:(keys.find(k=>k>nowKey)||'all');
+  box.append(el('div',{class:'months'},
+    el('button',{class:'chip','aria-pressed':String(S.metaMonth==='all'),onclick:()=>{S.metaMonth='all';render();}},'Toute la campagne'),
+    ...keys.map(k=>el('button',{class:'chip','aria-pressed':String(S.metaMonth===k),onclick:()=>{S.metaMonth=k;render();}},monthLabel(k)))));
+  if(!all.length){box.append(el('div',{class:'empty'},'Aucune pub Meta pour l’instant. Coche « Pub Meta » sur une sous-tâche, puis renseigne ses dates et son budget.'));return box;}
+  const dated=all.filter(t=>t.meta_start);const undated=all.filter(t=>!t.meta_start||!t.meta_end);
+  let from,to;
+  if(S.metaMonth==='all'){from=dated.reduce((m,t)=>t.meta_start<m?t.meta_start:m,'9999-12-31');to=dated.reduce((m,t)=>{const e=t.meta_end||t.meta_start;return e>m?e:m;},'0000-01-01');}
+  else [from,to]=monthBounds(S.metaMonth);
+  const inPeriod=dated.filter(t=>(t.meta_end||t.meta_start)>=from&&t.meta_start<=to).sort((a,b)=>a.meta_start.localeCompare(b.meta_start)||(a.meta_end||'').localeCompare(b.meta_end||''));
+  const total=inPeriod.reduce((s,t)=>s+budgetIn(t,from,to),0);
+  const t0=iso(today());
+  const live=dated.filter(t=>t.meta_start<=t0&&(t.meta_end||t.meta_start)>=t0);
+  const noBudget=all.filter(t=>!t.meta_budget).length;
+  box.append(el('div',{class:'kpis'},
+    el('div',{class:'kpi'},el('span',{},S.metaMonth==='all'?'Budget total':'Budget '+monthLabel(S.metaMonth)),el('b',{},eur(total)),el('small',{},S.metaMonth==='all'?'toutes les pubs datées':'au prorata des jours diffusés ce mois')),
+    el('div',{class:'kpi'},el('span',{},'Pubs sur la période'),el('b',{},String(inPeriod.length)),el('small',{},`${all.length} pub${all.length>1?'s':''} Meta au total`)),
+    el('div',{class:'kpi'},el('span',{},'En diffusion aujourd’hui'),el('b',{},String(live.length)),el('small',{},live.length?eur(live.reduce((s,t)=>s+budgetIn(t,t0,t0),0))+' / jour':'aucune')),
+    el('div',{class:'kpi'+(undated.length||noBudget?' warn':'')},el('span',{},'À compléter'),el('b',{},String(all.filter(t=>!t.meta_start||!t.meta_end||!t.meta_budget).length)),el('small',{},`${undated.length} sans dates · ${noBudget} sans budget`))));
+  // frise
+  if(inPeriod.length){
+    const span=dayCount(from,to);
+    const pct=d=>(dayCount(from,d)-1)/span*100;
+    const ticks=[];
+    if(S.metaMonth==='all'){for(const k of keys){const[a]=monthBounds(k);if(a>=from&&a<=to)ticks.push([pct(a),MONTHS[+k.slice(5)-1].slice(0,4)+'.']);}}
+    else{const n=dayCount(from,to);for(let i=1;i<=n;i+=(i===1?4:5)){const d=new Date(pd(from));d.setDate(i);ticks.push([pct(iso(d)),String(i)]);}}
+    const gantt=el('div',{class:'gantt'},
+      el('div',{class:'g-row g-head'},el('div',{class:'g-lab'}),el('div',{class:'g-track'},ticks.map(([x,l])=>el('span',{class:'g-tick',style:`left:${x}%`},l)),(t0>=from&&t0<=to)?el('span',{class:'g-today',style:`left:${pct(t0)}%`,title:'Aujourd’hui'}):null),el('div',{class:'g-val'})));
+    for(const t of inPeriod){
+      const p=t.post_id?S.posts.get(t.post_id):null;
+      const s1=t.meta_start>from?t.meta_start:from;const e0=t.meta_end||t.meta_start;const e1=e0<to?e0:to;
+      const left=pct(s1),width=Math.max(dayCount(s1,e1)/span*100,1.2);
+      gantt.append(el('button',{class:'g-row',type:'button',onclick:()=>p?openPost(p.id):null,title:`${t.text} · ${fmtShort(pd(t.meta_start))} → ${fmtShort(pd(e0))}`},
+        el('div',{class:'g-lab'},el('b',{},t.text),el('small',{},p?p.title:'Sans thématique')),
+        el('div',{class:'g-track'},el('span',{class:'g-bar'+(isDone(t)?' done':'')+(t.meta_end?'':' open'),style:`left:${left}%;width:${width}%`},`${fmtShort(pd(t.meta_start))} → ${t.meta_end?fmtShort(pd(t.meta_end)):'?'}`),(t0>=from&&t0<=to)?el('span',{class:'g-today',style:`left:${pct(t0)}%`}):null),
+        el('div',{class:'g-val'},t.meta_budget?eur(budgetIn(t,from,to)):el('span',{class:'owner'},'—'))));
+    }
+    box.append(el('div',{class:'gantt-wrap'},gantt));
+  }else box.append(el('div',{class:'empty'},'Aucune pub Meta en diffusion sur cette période.'));
+  // tableau détaillé
+  const rows=[...new Set([...inPeriod,...(S.metaMonth==='all'?undated:[])])];
+  if(rows.length){
+    const tbl=el('table',{class:'mtable'},
+      el('thead',{},el('tr',{},...['Thématique','Pub','Format','Du','Au','Jours','Budget','€ / jour','Responsable','Statut'].map(h=>el('th',{},h)))),
+      el('tbody',{},rows.map(t=>{const p=t.post_id?S.posts.get(t.post_id):null;const n=(t.meta_start&&t.meta_end)?dayCount(t.meta_start,t.meta_end):null;
+        return el('tr',{onclick:()=>p?openPost(p.id):null,style:p?'cursor:pointer':''},
+          el('td',{},p?p.title:'—'),el('td',{class:'strong'},t.text),el('td',{},t.format||''),
+          el('td',{},t.meta_start?fmtShort(pd(t.meta_start)):el('span',{class:'late'},'à définir')),el('td',{},t.meta_end?fmtShort(pd(t.meta_end)):el('span',{class:'late'},'à définir')),
+          el('td',{class:'num'},n??'—'),el('td',{class:'num'},t.meta_budget?eur(t.meta_budget):el('span',{class:'late'},'—')),
+          el('td',{class:'num'},(n&&t.meta_budget)?eur(t.meta_budget/n):'—'),el('td',{},mName(t.assignee_id)),el('td',{},el('span',{class:'status '+TCLS[tStat(t)]},tStat(t))));})),
+      el('tfoot',{},el('tr',{},el('td',{colspan:'6'},'Total des budgets'+(S.metaMonth==='all'?'':' (campagnes entières)')),el('td',{class:'num'},eur(rows.reduce((s,t)=>s+(Number(t.meta_budget)||0),0))),el('td',{colspan:'3'}))));
+    box.append(el('div',{class:'mtable-wrap'},tbl));
+  }
+  // répartition mensuelle
+  if(S.metaMonth==='all'&&keys.length){
+    box.append(el('div',{class:'mtable-wrap'},el('table',{class:'mtable'},
+      el('thead',{},el('tr',{},el('th',{},'Mois'),el('th',{class:'num'},'Budget Meta (au prorata des jours)'))),
+      el('tbody',{},keys.map(k=>{const[a,b]=monthBounds(k);return el('tr',{onclick:()=>{S.metaMonth=k;render();},style:'cursor:pointer'},el('td',{},monthLabel(k)),el('td',{class:'num'},eur(dated.reduce((s,t)=>s+budgetIn(t,a,b),0))));})))));
+  }
+  return box;
+}
+
 /* ---------- to-do ---------- */
 function renderTodos(){
   const box=el('div',{class:'todo-layout'});
-  const postSel=el('select',{id:'tPost','aria-label':'Post lié'},el('option',{value:''},'Aucun post lié'),...postOptions());
+  const postSel=el('select',{id:'tPost','aria-label':'Thématique liée'},el('option',{value:''},'Aucune thématique'),...postOptions());
   box.append(el('form',{class:'addbar',onsubmit:async e=>{e.preventDefault();
       const text=$('#tText').value.trim();if(!text)return;
       await addTodo({text,assignee_id:$('#tAss').value||null,due:$('#tDue').value||null,post_id:postSel.value||null});
@@ -284,32 +367,30 @@ function renderTeam(){
 
 /* ---------- éditeur de post ---------- */
 function openPost(id,presetDate){
-  const p=id?S.posts.get(id):{date:presetDate||'',title:'',rubrique:'push',canal:'Instagram',format:'',objectif:'',statut:'Idée',owner_id:null,notes:''};
+  const p=id?S.posts.get(id):{date:presetDate||'',title:'',canal:'Instagram',format:'',objectif:'',statut:'Idée',owner_id:null,notes:''};
   if(!p)return;
   S.drawerPost=id;
   const f=(lab,node)=>el('div',{class:'field'},el('label',{for:node.id},lab),node);
   const inp=(idn,val,ph)=>el('input',{type:'text',id:idn,value:val||'',placeholder:ph||''});
   const date=el('input',{type:'date',id:'pDate',value:p.date||''});
-  const rubSel=el('select',{id:'pRub'},RUBS.map(r=>el('option',{value:r.k,selected:r.k===p.rubrique?true:null},r.l)));
   const canSel=el('select',{id:'pCanal'},CANAUX.map(c=>el('option',{value:c,selected:c===(p.canal||'Instagram')?true:null},c)));
   const stSel=el('select',{id:'pStat'},STATUTS.map(s=>el('option',{value:s,selected:s===p.statut?true:null},s)));
-  const own=memberSelect('pOwner',p.owner_id,'Responsable');
-  const notes=el('textarea',{id:'pNotes',placeholder:'Brief visuel, légende, liens, retours…'});notes.value=p.notes||'';
+    const notes=el('textarea',{id:'pNotes',placeholder:'Brief visuel, légende, liens, retours…'});notes.value=p.notes||'';
   const linked=id?subsFor(id):[];
   const sub=el('div',{id:'drawerSubs',style:'display:flex;flex-direction:column;gap:6px'},linked.map(t=>subRow(t)));
   const delBtn=id?el('button',{class:'btn danger',type:'button',onclick:async e=>{const b=e.currentTarget;if(!b.dataset.armed){b.dataset.armed='1';b.textContent='Confirmer (supprime aussi ses sous-tâches)';return;}await removePost(id);closeDrawer();}},'Supprimer'):el('span');
-  const form=el('form',{class:'drawer',role:'dialog','aria-modal':'true','aria-label':'Post',onsubmit:async e=>{e.preventDefault();
-      const data={date:date.value||null,title:$('#pTitle').value.trim(),rubrique:rubSel.value,canal:canSel.value,format:$('#pFormat').value.trim(),objectif:$('#pObj').value.trim(),statut:stSel.value,owner_id:own.value||null,notes:notes.value.trim()};
+  const form=el('form',{class:'drawer',role:'dialog','aria-modal':'true','aria-label':'Thématique',onsubmit:async e=>{e.preventDefault();
+      const data={date:date.value||null,title:$('#pTitle').value.trim(),canal:canSel.value,format:$('#pFormat').value.trim(),objectif:$('#pObj').value.trim(),statut:stSel.value,owner_id:$('#pOwner').value||null,notes:notes.value.trim()};
       if(!data.title){$('#pTitle').focus();return;}
       if(await savePost(id,data))closeDrawer();}},
-    el('div',{style:'display:flex;justify-content:space-between;align-items:center;gap:10px'},el('h2',{},id?'Modifier le post':'Nouveau post'),el('button',{class:'x',type:'button','aria-label':'Fermer',onclick:closeDrawer},'×')),
-    f('Sujet',inp('pTitle',p.title,'Ex. Gift Guide Édition Limitée #1')),
-    el('div',{class:'two'},f('Date de publication',date),f('Statut',stSel)),
-    el('div',{class:'two'},f('Rubrique',rubSel),f('Canal',canSel)),
-    el('div',{class:'two'},f('Responsable',own),f('Format',inp('pFormat',p.format,'Carrousel, Reel, GIF…'))),
+    el('div',{style:'display:flex;justify-content:space-between;align-items:center;gap:10px'},el('h2',{},id?'Modifier la thématique':'Nouvelle thématique'),el('button',{class:'x',type:'button','aria-label':'Fermer',onclick:closeDrawer},'×')),
+    f('Thématique',inp('pTitle',p.title,'Ex. Boutique de Noël ouverte')),
+    el('div',{class:'two'},f('Date',date),f('Statut',stSel)),
+    el('div',{class:'two'},f('Canal',canSel),f('Responsable',memberSelect('pOwner',p.owner_id,'Responsable'))),
+    f('Format',inp('pFormat',p.format,'Carrousel, Reel, GIF…')),
     f('Objectif',inp('pObj',p.objectif,'')),
     f('Notes',notes),
-    id?el('div',{class:'field'},el('label',{},`Sous-tâches (${linked.length})`),sub,addSubForm(id,true)):el('p',{class:'owner'},'Enregistre le post pour lui ajouter des sous-tâches.'),
+    id?el('div',{class:'field'},el('label',{},`Sous-tâches (${linked.length})`),sub,addSubForm(id,true)):el('p',{class:'owner'},'Enregistre la thématique pour lui ajouter des sous-tâches.'),
     el('div',{class:'actions'},delBtn,el('div',{style:'display:flex;gap:8px'},el('button',{class:'btn ghost',type:'button',onclick:closeDrawer},'Annuler'),el('button',{class:'btn primary',type:'submit'},'Enregistrer'))));
   const ov=el('div',{class:'overlay',onclick:e=>{if(e.target===ov)closeDrawer();}},form);
   $('#drawerHost').replaceChildren(ov);
@@ -328,15 +409,14 @@ function fail(error){toast(error?.message?.includes('JWT')?'Session expirée : r
 async function savePost(id,data){
   const q=id?sb.from('posts').update(data).eq('id',id).select().single():sb.from('posts').insert(data).select().single();
   const {data:row,error}=await q;if(error){fail(error);return false;}
-  S.posts.set(row.id,row);render();toast('Post enregistré');return true;}
-async function removePost(id){const {error}=await sb.from('posts').delete().eq('id',id);if(error)return fail(error);S.posts.delete(id);for(const t of [...S.todos.values()])if(t.post_id===id)S.todos.delete(t.id);render();toast('Post supprimé');}
-async function addTodo(t){const {data:row,error}=await sb.from('todos').insert(t).select().single();if(error)return fail(error);S.todos.set(row.id,row);render();refreshDrawerSubs();toast(row.assignee_id&&row.assignee_id!==S.me?.id?'Tâche ajoutée, '+mName(row.assignee_id)+' est prévenu·e par mail':'Tâche ajoutée');}
+  S.posts.set(row.id,row);render();toast('Thématique enregistrée');return true;}
+async function removePost(id){const {error}=await sb.from('posts').delete().eq('id',id);if(error)return fail(error);S.posts.delete(id);for(const t of [...S.todos.values()])if(t.post_id===id)S.todos.delete(t.id);render();toast('Thématique supprimée');}
+async function addTodo(t){const {data:row,error}=await sb.from('todos').insert(t).select().single();if(error)return fail(error);S.todos.set(row.id,row);render();refreshDrawerSubs();toast('Tâche ajoutée');}
 async function updateTodo(id,patch){
   const before=S.todos.get(id);
   const {data:row,error}=await sb.from('todos').update(patch).eq('id',id).select().single();if(error)return fail(error);
   S.todos.set(row.id,row);render();refreshDrawerSubs();
-  if(patch.assignee_id&&patch.assignee_id!==before?.assignee_id&&patch.assignee_id!==S.me?.id)toast(mName(patch.assignee_id)+' est prévenu·e par mail');
-  else if(patch.statut==='Fait'&&before?.statut!=='Fait')toast('Fait ! L’équipe est prévenue par mail');
+  if(patch.statut==='Fait'&&before?.statut!=='Fait')toast('Fait !');
 }
 async function removeTodo(id){const {error}=await sb.from('todos').delete().eq('id',id);if(error)return fail(error);S.todos.delete(id);render();refreshDrawerSubs();toast('Tâche supprimée');}
 function showNotice(m){const n=$('#notice');n.textContent=m;n.hidden=false;}

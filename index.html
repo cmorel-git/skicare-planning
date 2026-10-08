@@ -86,7 +86,7 @@ details.brief[open] summary::after{content:"－"}
 .quota{font-family:var(--mono);font-size:12px;padding:2px 9px;border-radius:99px;font-variant-numeric:tabular-nums}
 .quota.ok{background:var(--ok-bg);color:var(--ok)} .quota.low{background:var(--warn-bg);color:var(--warn)}
 .rows{display:flex;flex-direction:column}
-.row{display:grid;grid-template-columns:86px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1.2fr) 150px;gap:14px;align-items:start;padding:12px 16px;border-top:1px solid var(--line);text-align:left;background:transparent;border-left:0;border-right:0;border-bottom:0;width:100%}
+.row{display:grid;grid-template-columns:86px minmax(0,2fr) minmax(0,1.2fr) 170px;gap:14px;align-items:start;padding:12px 16px;border-top:1px solid var(--line);text-align:left;background:transparent;border-left:0;border-right:0;border-bottom:0;width:100%}
 .row:first-child{border-top:0}
 .row:hover{background:var(--sunk)}
 .row .d{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -107,7 +107,7 @@ details.brief[open] summary::after{content:"－"}
 .row.tf .d b{color:var(--badge)}
 @media (max-width:820px){
   .row{grid-template-columns:70px minmax(0,1fr);}
-  .row .f,.row .rubcell{grid-column:2}
+  .row .f{grid-column:2}
   .row .meta{grid-column:2;flex-direction:row;flex-wrap:wrap;align-items:center}
 }
 
@@ -167,6 +167,47 @@ textarea{resize:vertical;min-height:70px}
 .st .cnt{min-height:32px;resize:vertical;line-height:1.45;overflow:hidden}
 .st.k-fait .st-more{opacity:.7}
 @media (max-width:640px){.st-more{grid-template-columns:1fr}}
+.st-meta{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:12px;color:var(--muted)}
+.st-meta.on{background:var(--surface);border:1px dashed var(--r5);border-radius:8px;padding:6px 10px}
+.metachk{display:inline-flex;align-items:center;gap:6px;font-weight:700;cursor:pointer}
+.metachk input{width:16px;height:16px;accent-color:var(--r5)}
+.mf{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+.mf input{width:auto;padding:4px 8px;font-size:13px;background:var(--bg)}
+.mf input[type=number]{width:100px}
+.metapill{display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:color-mix(in srgb,var(--r5) 15%,transparent);color:var(--r5);white-space:nowrap}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.kpi span{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+.kpi b{font-family:var(--display);font-size:30px;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi small{font-size:12px;color:var(--muted)}
+.kpi.warn b{color:var(--warn)}
+.gantt-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+.gantt{min-width:720px;display:flex;flex-direction:column}
+.g-row{display:grid;grid-template-columns:230px minmax(0,1fr) 90px;gap:10px;align-items:center;padding:7px 12px;border:0;border-top:1px solid var(--line);background:transparent;text-align:left;width:100%}
+button.g-row:hover{background:var(--sunk)}
+.g-head{border-top:0;padding-block:8px 4px}
+.g-lab{min-width:0;display:flex;flex-direction:column}
+.g-lab b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g-lab small{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g-track{position:relative;height:26px;background:repeating-linear-gradient(90deg,transparent 0 calc(100%/7 - 1px),color-mix(in srgb,var(--line) 60%,transparent) calc(100%/7 - 1px) calc(100%/7));border-radius:4px}
+.g-head .g-track{background:none;height:18px}
+.g-tick{position:absolute;top:0;font-size:11px;color:var(--muted);transform:translateX(-2px);font-variant-numeric:tabular-nums}
+.g-bar{position:absolute;top:3px;height:20px;border-radius:5px;background:var(--r5);color:#fff;font-size:11px;font-weight:700;padding:0 6px;display:flex;align-items:center;white-space:nowrap;overflow:hidden}
+.g-bar.done{background:var(--ok);opacity:.75}
+.g-bar.open{background:repeating-linear-gradient(45deg,var(--r5) 0 6px,color-mix(in srgb,var(--r5) 70%,white) 6px 12px)}
+.g-today{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--badge)}
+.g-val{text-align:right;font-weight:700;font-variant-numeric:tabular-nums;font-size:13px}
+.mtable-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+.mtable{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
+.mtable th{text-align:left;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:9px 12px;background:var(--sunk);border-bottom:2px solid var(--mint)}
+.mtable td{padding:9px 12px;border-top:1px solid var(--line);vertical-align:top}
+.mtable tbody tr:hover{background:var(--sunk)}
+.mtable .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mtable th.num{text-align:right}
+.mtable .strong{font-weight:700}
+.mtable .late{color:var(--badge);font-weight:700}
+.mtable tfoot td{font-weight:800;border-top:2px solid var(--line);background:var(--sunk)}
+@media (max-width:640px){.mf{flex-wrap:wrap}}
 .addsub{display:flex;gap:6px}
 .addsub input{font-size:13px;padding:5px 8px;background:var(--surface)}
 .addsub .btn{padding:5px 12px;font-size:13px}
@@ -225,12 +266,13 @@ textarea{resize:vertical;min-height:70px}
 
   <div class="toolbar">
     <div class="tabs" role="tablist">
-      <button role="tab" id="tab-weeks" aria-selected="true" data-view="weeks">Semaines</button>
+      <button role="tab" id="tab-weeks" aria-selected="true" data-view="themes">Thématiques</button>
       <button role="tab" id="tab-month" aria-selected="false" data-view="month">Mois</button>
       <button role="tab" id="tab-todo" aria-selected="false" data-view="todo">To-do <span id="todoBadge" class="tcount"></span></button>
+      <button role="tab" id="tab-meta" aria-selected="false" data-view="meta">Planning &amp; budget Meta</button>
       <button role="tab" id="tab-team" aria-selected="false" data-view="team">Équipe</button>
     </div>
-    <button class="btn primary" id="newPost">+ Nouveau post</button>
+    <button class="btn primary" id="newPost">+ Nouvelle thématique</button>
   </div>
 
   <div id="notice" class="notice" hidden></div>
