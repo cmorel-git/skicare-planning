@@ -112,7 +112,7 @@ function render(){
 }
 
 /* ---------- thématiques ---------- */
-const canalOk=p=>S.canal==='all'||(p.canal||'Instagram')===S.canal;
+const canalOk=p=>true;
 function monthKeys(){const set=new Set();for(const p of S.posts.values()){if(p.date)set.add(p.date.slice(0,7));}return [...set].sort();}
 const monthLabel=k=>{const[y,m]=k.split('-');return `${MONTHS[+m-1]} ${y}`;};
 function renderThemes(){
@@ -124,9 +124,7 @@ function renderThemes(){
     el('button',{class:'chip','aria-pressed':String(S.month==='all'),onclick:()=>{S.month='all';render();}},'Tout'),
     ...keys.map(k=>{const[y,m]=k.split('-');return el('button',{class:'chip','aria-pressed':String(S.month===k),onclick:()=>{S.month=k;render();}},`${MONTHS[+m-1]} ${y.slice(2)}`);}),
     hasIdeas?el('button',{class:'chip','aria-pressed':String(S.month==='ideas'),onclick:()=>{S.month='ideas';render();}},'Sans date'):null,
-    el('select',{id:'canalFilter',class:'chip subs-toggle','aria-label':'Canal',onchange:e=>{S.canal=e.target.value;try{localStorage.setItem('sc_canal',S.canal)}catch(_){}render();}},
-      el('option',{value:'all'},'Tous les canaux'),...CANAUX.map(c=>el('option',{value:c,selected:S.canal===c?true:null},c))),
-    el('button',{class:'chip','aria-pressed':String(S.showSubs),onclick:()=>{S.showSubs=!S.showSubs;try{localStorage.setItem('sc_subs',S.showSubs?'1':'0')}catch(e){}render();}},S.showSubs?'Sous-tâches affichées':'Sous-tâches masquées')));
+    el('button',{class:'chip subs-toggle','aria-pressed':String(S.showSubs),onclick:()=>{S.showSubs=!S.showSubs;try{localStorage.setItem('sc_subs',S.showSubs?'1':'0')}catch(e){}render();}},S.showSubs?'Sous-tâches affichées':'Sous-tâches masquées')));
   if(S.posts.size===0){frag.append(el('div',{class:'empty'},'Aucune thématique pour l’instant. Ajoute la première avec « + Nouvelle thématique ».'));return frag;}
   if(S.month==='ideas'){
     const ideas=[...S.posts.values()].filter(p=>!p.date&&canalOk(p)).sort((a,b)=>(a.title||'').localeCompare(b.title||''));
@@ -150,11 +148,9 @@ function rowFor(p){
   const metas=tds.filter(t=>t.meta);const metaBudget=metas.reduce((s,t)=>s+(Number(t.meta_budget)||0),0);
   const row=el('button',{class:'row',onclick:()=>openPost(p.id)},
     el('div',{class:'d'},d?[el('b',{},fmtShort(d)),DOW[(d.getDay()+6)%7]]:el('b',{},'—')),
-    el('div',{class:'t'},p.title||'Sans titre',p.objectif?el('small',{},p.objectif):null),
-    el('div',{class:'f'},el('div',{},p.canal||'Instagram'),p.format?el('div',{},p.format):null),
+    el('div',{class:'t'},p.title||'Sans titre',p.notes?el('div',{class:'notes'},p.notes):null),
     el('div',{class:'meta'},
       el('span',{class:'status '+(SCLASS[p.statut]||'s-idee')},p.statut||'Idée'),
-      p.owner_id?el('span',{class:'owner'},mName(p.owner_id)):null,
       tds.length?el('span',{class:'tcount'},`${tds.length-openT}/${tds.length} sous-tâches`):null,
       metas.length?el('span',{class:'metapill'},`Meta · ${eur(metaBudget)}`):null));
   if(!S.showSubs)return el('div',{class:'post'},row);
@@ -367,28 +363,24 @@ function renderTeam(){
 
 /* ---------- éditeur de post ---------- */
 function openPost(id,presetDate){
-  const p=id?S.posts.get(id):{date:presetDate||'',title:'',canal:'Instagram',format:'',objectif:'',statut:'Idée',owner_id:null,notes:''};
+  const p=id?S.posts.get(id):{date:presetDate||'',title:'',statut:'Idée',notes:''};
   if(!p)return;
   S.drawerPost=id;
   const f=(lab,node)=>el('div',{class:'field'},el('label',{for:node.id},lab),node);
   const inp=(idn,val,ph)=>el('input',{type:'text',id:idn,value:val||'',placeholder:ph||''});
   const date=el('input',{type:'date',id:'pDate',value:p.date||''});
-  const canSel=el('select',{id:'pCanal'},CANAUX.map(c=>el('option',{value:c,selected:c===(p.canal||'Instagram')?true:null},c)));
   const stSel=el('select',{id:'pStat'},STATUTS.map(s=>el('option',{value:s,selected:s===p.statut?true:null},s)));
-    const notes=el('textarea',{id:'pNotes',placeholder:'Brief visuel, légende, liens, retours…'});notes.value=p.notes||'';
+    const notes=el('textarea',{id:'pNotes',placeholder:'Notes visibles directement dans la liste : brief, intentions, liens…'});notes.value=p.notes||'';
   const linked=id?subsFor(id):[];
   const sub=el('div',{id:'drawerSubs',style:'display:flex;flex-direction:column;gap:6px'},linked.map(t=>subRow(t)));
   const delBtn=id?el('button',{class:'btn danger',type:'button',onclick:async e=>{const b=e.currentTarget;if(!b.dataset.armed){b.dataset.armed='1';b.textContent='Confirmer (supprime aussi ses sous-tâches)';return;}await removePost(id);closeDrawer();}},'Supprimer'):el('span');
   const form=el('form',{class:'drawer',role:'dialog','aria-modal':'true','aria-label':'Thématique',onsubmit:async e=>{e.preventDefault();
-      const data={date:date.value||null,title:$('#pTitle').value.trim(),canal:canSel.value,format:$('#pFormat').value.trim(),objectif:$('#pObj').value.trim(),statut:stSel.value,owner_id:$('#pOwner').value||null,notes:notes.value.trim()};
+      const data={date:date.value||null,title:$('#pTitle').value.trim(),statut:stSel.value,notes:notes.value.trim()};
       if(!data.title){$('#pTitle').focus();return;}
       if(await savePost(id,data))closeDrawer();}},
     el('div',{style:'display:flex;justify-content:space-between;align-items:center;gap:10px'},el('h2',{},id?'Modifier la thématique':'Nouvelle thématique'),el('button',{class:'x',type:'button','aria-label':'Fermer',onclick:closeDrawer},'×')),
     f('Thématique',inp('pTitle',p.title,'Ex. Boutique de Noël ouverte')),
     el('div',{class:'two'},f('Date',date),f('Statut',stSel)),
-    el('div',{class:'two'},f('Canal',canSel),f('Responsable',memberSelect('pOwner',p.owner_id,'Responsable'))),
-    f('Format',inp('pFormat',p.format,'Carrousel, Reel, GIF…')),
-    f('Objectif',inp('pObj',p.objectif,'')),
     f('Notes',notes),
     id?el('div',{class:'field'},el('label',{},`Sous-tâches (${linked.length})`),sub,addSubForm(id,true)):el('p',{class:'owner'},'Enregistre la thématique pour lui ajouter des sous-tâches.'),
     el('div',{class:'actions'},delBtn,el('div',{style:'display:flex;gap:8px'},el('button',{class:'btn ghost',type:'button',onclick:closeDrawer},'Annuler'),el('button',{class:'btn primary',type:'submit'},'Enregistrer'))));
