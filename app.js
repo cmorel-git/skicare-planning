@@ -150,7 +150,6 @@ function rowFor(p){
     el('div',{class:'d'},d?[el('b',{},fmtShort(d)),DOW[(d.getDay()+6)%7]]:el('b',{},'—')),
     el('div',{class:'t'},p.title||'Sans titre',p.notes?el('div',{class:'notes'},p.notes):null),
     el('div',{class:'meta'},
-      el('span',{class:'status '+(SCLASS[p.statut]||'s-idee')},p.statut||'Idée'),
       tds.length?el('span',{class:'tcount'},`${tds.length-openT}/${tds.length} sous-tâches`):null,
       metas.length?el('span',{class:'metapill'},`Meta · ${eur(metaBudget)}`):null));
   if(!S.showSubs)return el('div',{class:'post'},row);
@@ -221,7 +220,7 @@ function renderMonth(){
     if(i>=35&&d.getMonth()!==S.calM)break;
     const k=iso(d);const out=d.getMonth()!==S.calM;
     const cell=el('div',{class:'cell'+(out?' out':'')+(k===tIso?' today':''),title:'Ajouter une thématique ce jour',style:'cursor:copy',onclick:()=>openPost(null,k)},el('span',{class:'n'},d.getDate()));
-    for(const p of (byDate.get(k)||[])){cell.append(el('button',{class:'ev',style:'--rc:var(--accent)',title:`${p.title} · ${p.statut||''}`,onclick:e=>{e.stopPropagation();openPost(p.id);}},p.title||'Sans titre'));}
+    for(const p of (byDate.get(k)||[])){cell.append(el('button',{class:'ev',style:'--rc:var(--accent)',title:p.title,onclick:e=>{e.stopPropagation();openPost(p.id);}},p.title||'Sans titre'));}
     grid.append(cell);
   }
   box.append(el('div',{class:'cal-wrap'},grid));
@@ -369,18 +368,17 @@ function openPost(id,presetDate){
   const f=(lab,node)=>el('div',{class:'field'},el('label',{for:node.id},lab),node);
   const inp=(idn,val,ph)=>el('input',{type:'text',id:idn,value:val||'',placeholder:ph||''});
   const date=el('input',{type:'date',id:'pDate',value:p.date||''});
-  const stSel=el('select',{id:'pStat'},STATUTS.map(s=>el('option',{value:s,selected:s===p.statut?true:null},s)));
     const notes=el('textarea',{id:'pNotes',placeholder:'Notes visibles directement dans la liste : brief, intentions, liens…'});notes.value=p.notes||'';
   const linked=id?subsFor(id):[];
   const sub=el('div',{id:'drawerSubs',style:'display:flex;flex-direction:column;gap:6px'},linked.map(t=>subRow(t)));
   const delBtn=id?el('button',{class:'btn danger',type:'button',onclick:async e=>{const b=e.currentTarget;if(!b.dataset.armed){b.dataset.armed='1';b.textContent='Confirmer (supprime aussi ses sous-tâches)';return;}await removePost(id);closeDrawer();}},'Supprimer'):el('span');
   const form=el('form',{class:'drawer',role:'dialog','aria-modal':'true','aria-label':'Thématique',onsubmit:async e=>{e.preventDefault();
-      const data={date:date.value||null,title:$('#pTitle').value.trim(),statut:stSel.value,notes:notes.value.trim()};
+      const data={date:date.value||null,title:$('#pTitle').value.trim(),notes:notes.value.trim()};
       if(!data.title){$('#pTitle').focus();return;}
       if(await savePost(id,data))closeDrawer();}},
     el('div',{style:'display:flex;justify-content:space-between;align-items:center;gap:10px'},el('h2',{},id?'Modifier la thématique':'Nouvelle thématique'),el('button',{class:'x',type:'button','aria-label':'Fermer',onclick:closeDrawer},'×')),
     f('Thématique',inp('pTitle',p.title,'Ex. Boutique de Noël ouverte')),
-    el('div',{class:'two'},f('Date',date),f('Statut',stSel)),
+    f('Date',date),
     f('Notes',notes),
     id?el('div',{class:'field'},el('label',{},`Sous-tâches (${linked.length})`),sub,addSubForm(id,true)):el('p',{class:'owner'},'Enregistre la thématique pour lui ajouter des sous-tâches.'),
     el('div',{class:'actions'},delBtn,el('div',{style:'display:flex;gap:8px'},el('button',{class:'btn ghost',type:'button',onclick:closeDrawer},'Annuler'),el('button',{class:'btn primary',type:'submit'},'Enregistrer'))));
