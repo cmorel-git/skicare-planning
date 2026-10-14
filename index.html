@@ -209,6 +209,24 @@ button.g-row:hover{background:var(--sunk)}
 .mtable .late{color:var(--badge);font-weight:700}
 .mtable tfoot td{font-weight:800;border-top:2px solid var(--line);background:var(--sunk)}
 @media (max-width:640px){.mf{flex-wrap:wrap}}
+.task{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--tyc,var(--line));border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:8px}
+.ty-insta{--tyc:var(--r3)} .ty-nl{--tyc:var(--r4)} .ty-meta{--tyc:var(--r5)} .ty-autre{--tyc:var(--muted)}
+.task-h{display:grid;grid-template-columns:150px minmax(0,1fr) auto 30px;gap:6px;align-items:center}
+.task-h .ttype{font-weight:700;font-size:12px;color:var(--tyc);border-color:color-mix(in srgb,var(--tyc) 45%,var(--line));padding:6px 8px}
+.ttype-ro{font-weight:700;font-size:12px;color:var(--muted);padding:6px 8px}
+.task-h .ktxt{font-weight:700;font-size:14px;background:var(--bg)}
+.subs2{display:flex;flex-direction:column;gap:6px;padding-left:12px;border-left:2px solid var(--sunk);margin-left:4px}
+.addtask{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:6px}
+.addtask select,.addtask input{font-size:13px;padding:6px 8px}
+.addtask .btn{padding:6px 12px;font-size:13px}
+@media (max-width:640px){.task-h{grid-template-columns:1fr 30px}.task-h .ktxt{grid-column:1/-1}.addtask{grid-template-columns:1fr}}
+.rsec{display:flex;flex-direction:column;gap:12px}
+.sec-h{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;border-bottom:2px solid var(--mint);padding-bottom:6px;margin-top:10px}
+.sec-h h2{font-family:var(--display);font-size:28px;color:var(--accent);margin:0}
+.rtable .rin{width:92px;text-align:right;padding:4px 6px;font-size:13px;border:1px solid var(--line);border-radius:6px;background:var(--bg);font-variant-numeric:tabular-nums}
+.rtable td{vertical-align:middle}
+.rtable{min-width:980px}
+.linkbtn{border:0;background:none;padding:0;color:var(--accent);font-weight:600;text-align:left;cursor:pointer;font-size:13px}
 .addsub{display:flex;gap:6px}
 .addsub input{font-size:13px;padding:5px 8px;background:var(--surface)}
 .addsub .btn{padding:5px 12px;font-size:13px}
@@ -270,7 +288,7 @@ button.g-row:hover{background:var(--sunk)}
       <button role="tab" id="tab-weeks" aria-selected="true" data-view="themes">Thématiques</button>
       <button role="tab" id="tab-month" aria-selected="false" data-view="month">Mois</button>
       <button role="tab" id="tab-todo" aria-selected="false" data-view="todo">To-do <span id="todoBadge" class="tcount"></span></button>
-      <button role="tab" id="tab-meta" aria-selected="false" data-view="meta">Planning &amp; budget Meta</button>
+      <button role="tab" id="tab-meta" aria-selected="false" data-view="meta">Plannings &amp; résultats</button>
       <button role="tab" id="tab-team" aria-selected="false" data-view="team">Équipe</button>
     </div>
     <button class="btn primary" id="newPost">+ Nouvelle thématique</button>

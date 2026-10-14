@@ -14,13 +14,13 @@ const RUBS=[
 const CANAUX=['Instagram','Site / e-shop','Newsletter','Boutique','Autre'];
 const STATUTS=['Idée','À construire','À shooter','À produire','Prêt / à finaliser','Validé','Publié'];
 const SCLASS={'Idée':'s-idee','À construire':'s-wip','À shooter':'s-wip','À produire':'s-wip','Prêt / à finaliser':'s-ready','Validé':'s-ok','Publié':'s-pub'};
-const TSTAT=['À faire','En cours','Bloqué','Fait'];
-const TKEY={'À faire':'k-faire','En cours':'k-cours','Bloqué':'k-bloque','Fait':'k-fait'};
-const TCLS={'À faire':'s-idee','En cours':'s-wip','Bloqué':'s-late','Fait':'s-ok'};
+const TSTAT=['À faire','En cours','Fait'];
+const TKEY={'À faire':'k-faire','En cours':'k-cours','Fait':'k-fait'};
+const TCLS={'À faire':'s-idee','En cours':'s-wip','Fait':'s-ok'};
 const MONTHS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const DOW=['lun','mar','mer','jeu','ven','sam','dim'];
 
-const S={posts:new Map(),todos:new Map(),members:new Map(),me:null,view:'themes',month:null,metaMonth:null,ready:false,
+const S={posts:new Map(),tasks:new Map(),todos:new Map(),members:new Map(),me:null,view:'themes',month:null,metaMonth:null,ready:false,
   todoFilter:'open',who:'all',calY:null,calM:null,showSubs:true,canal:'all',drawerPost:null};
 try{const v=localStorage.getItem('sc_view');if(v)S.view=(v==='weeks'?'themes':v);const w=localStorage.getItem('sc_who');if(w)S.who=w;if(localStorage.getItem('sc_subs')==='0')S.showSubs=false;const c=localStorage.getItem('sc_canal');if(c)S.canal=c;}catch(e){}
 
@@ -34,7 +34,7 @@ const today=()=>{const t=new Date();return new Date(t.getFullYear(),t.getMonth()
 const fmtShort=d=>`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
 const mName=id=>(id&&S.members.get(id)?.name)||'';
 const activeMembers=()=>[...S.members.values()].filter(m=>m.active).sort((a,b)=>a.name.localeCompare(b.name));
-const tStat=t=>TSTAT.includes(t.statut)?t.statut:'À faire';
+const tStat=t=>TSTAT.includes(t.statut)?t.statut:(t.statut==='Bloqué'?'En cours':'À faire');
 const isDone=t=>tStat(t)==='Fait';
 const eur=n=>(Number(n)||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
 const dayCount=(a,b)=>Math.round((pd(b)-pd(a))/864e5)+1;
@@ -68,9 +68,9 @@ function showLogin(msg){
 
 /* ---------- données ---------- */
 async function loadAll(){
-  const [p,t,m]=await Promise.all([sb.from('posts').select('*'),sb.from('todos').select('*'),sb.from('team_members').select('*')]);
-  if(p.error||t.error||m.error){showNotice('Impossible de charger le planning. Recharge la page.');return;}
-  S.posts=new Map(p.data.map(r=>[r.id,r]));S.todos=new Map(t.data.map(r=>[r.id,r]));S.members=new Map(m.data.map(r=>[r.id,r]));
+  const [p,t,m,k]=await Promise.all([sb.from('posts').select('*'),sb.from('todos').select('*'),sb.from('team_members').select('*'),sb.from('tasks').select('*')]);
+  if(p.error||t.error||m.error||k.error){showNotice('Impossible de charger le planning. Recharge la page.');return;}
+  S.posts=new Map(p.data.map(r=>[r.id,r]));S.todos=new Map(t.data.map(r=>[r.id,r]));S.members=new Map(m.data.map(r=>[r.id,r]));S.tasks=new Map(k.data.map(r=>[r.id,r]));
   S.ready=true;render();refreshDrawerSubs();
 }
 function applyChange(map,payload){
@@ -80,6 +80,7 @@ function subscribe(){
   sb.channel('planning')
     .on('postgres_changes',{event:'*',schema:'public',table:'posts'},p=>{applyChange(S.posts,p);render();})
     .on('postgres_changes',{event:'*',schema:'public',table:'todos'},p=>{applyChange(S.todos,p);render();refreshDrawerSubs();})
+    .on('postgres_changes',{event:'*',schema:'public',table:'tasks'},p=>{applyChange(S.tasks,p);render();refreshDrawerSubs();})
     .on('postgres_changes',{event:'*',schema:'public',table:'team_members'},p=>{applyChange(S.members,p);render();})
     .subscribe();
   // filet de sécurité si la connexion temps réel décroche
@@ -102,7 +103,7 @@ function render(){
   const sel=focused&&ae.selectionStart!=null?[ae.selectionStart,ae.selectionEnd]:null;
   const sy=window.scrollY;
   if(S.view==='themes')v.replaceChildren(renderThemes());
-  else if(S.view==='meta')v.replaceChildren(renderMeta());
+  else if(S.view==='meta')v.replaceChildren(renderResults());
   else if(S.view==='month')v.replaceChildren(renderMonth());
   else if(S.view==='team')v.replaceChildren(renderTeam());
   else v.replaceChildren(renderTodos());
@@ -124,7 +125,7 @@ function renderThemes(){
     el('button',{class:'chip','aria-pressed':String(S.month==='all'),onclick:()=>{S.month='all';render();}},'Tout'),
     ...keys.map(k=>{const[y,m]=k.split('-');return el('button',{class:'chip','aria-pressed':String(S.month===k),onclick:()=>{S.month=k;render();}},`${MONTHS[+m-1]} ${y.slice(2)}`);}),
     hasIdeas?el('button',{class:'chip','aria-pressed':String(S.month==='ideas'),onclick:()=>{S.month='ideas';render();}},'Sans date'):null,
-    el('button',{class:'chip subs-toggle','aria-pressed':String(S.showSubs),onclick:()=>{S.showSubs=!S.showSubs;try{localStorage.setItem('sc_subs',S.showSubs?'1':'0')}catch(e){}render();}},S.showSubs?'Sous-tâches affichées':'Sous-tâches masquées')));
+    el('button',{class:'chip subs-toggle','aria-pressed':String(S.showSubs),onclick:()=>{S.showSubs=!S.showSubs;try{localStorage.setItem('sc_subs',S.showSubs?'1':'0')}catch(e){}render();}},S.showSubs?'Tâches affichées':'Tâches masquées')));
   if(S.posts.size===0){frag.append(el('div',{class:'empty'},'Aucune thématique pour l’instant. Ajoute la première avec « + Nouvelle thématique ».'));return frag;}
   if(S.month==='ideas'){
     const ideas=[...S.posts.values()].filter(p=>!p.date&&canalOk(p)).sort((a,b)=>(a.title||'').localeCompare(b.title||''));
@@ -142,58 +143,80 @@ function renderThemes(){
   }
   return frag;
 }
+const TYPES=['Post Insta','Newsletter','Pub Meta','Autre'];
+const TYPECLS={'Post Insta':'ty-insta','Newsletter':'ty-nl','Pub Meta':'ty-meta','Autre':'ty-autre'};
+const tasksFor=pid=>[...S.tasks.values()].filter(k=>k.post_id===pid).sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
+const subsOfTask=tid=>[...S.todos.values()].filter(t=>t.task_id===tid).sort((a,b)=>(isDone(a)-isDone(b))||(a.due||'9999').localeCompare(b.due||'9999')||(a.created_at||'').localeCompare(b.created_at||''));
+const enterBlur=e=>{if(e.key==='Enter'){e.preventDefault();e.target.blur();}};
 function rowFor(p){
   const d=pd(p.date);
-  const tds=subsFor(p.id);const openT=tds.filter(t=>!isDone(t)).length;
-  const metas=tds.filter(t=>t.meta);const metaBudget=metas.reduce((s,t)=>s+(Number(t.meta_budget)||0),0);
+  const ks=tasksFor(p.id);const tds=subsFor(p.id);const openT=tds.filter(t=>!isDone(t)).length;
+  const metas=ks.filter(k=>k.type==='Pub Meta');const metaBudget=metas.reduce((s,k)=>s+(Number(k.meta_budget)||0),0);
   const row=el('button',{class:'row',onclick:()=>openPost(p.id)},
     el('div',{class:'d'},d?[el('b',{},fmtShort(d)),DOW[(d.getDay()+6)%7]]:el('b',{},'—')),
     el('div',{class:'t'},p.title||'Sans titre',p.notes?el('div',{class:'notes'},p.notes):null),
     el('div',{class:'meta'},
-      tds.length?el('span',{class:'tcount'},`${tds.length-openT}/${tds.length} sous-tâches`):null,
+      ks.length?el('span',{class:'tcount'},`${ks.length} tâche${ks.length>1?'s':''}`):null,
+      tds.length?el('span',{class:'tcount'},`${tds.length-openT}/${tds.length} sous-tâches faites`):null,
       metas.length?el('span',{class:'metapill'},`Meta · ${eur(metaBudget)}`):null));
   if(!S.showSubs)return el('div',{class:'post'},row);
-  const subs=el('div',{class:'subs'},tds.map(t=>subRow(t)));
-  subs.append(addSubForm(p.id));
-  return el('div',{class:'post'},row,subs);
+  const orphans=tds.filter(t=>!t.task_id);
+  return el('div',{class:'post'},row,el('div',{class:'subs'},ks.map(taskBlock),orphans.length?orphanBlock(orphans):null,addTaskForm(p.id)));
 }
-function addSubForm(pid,inDrawer){
-  const id=(inDrawer?'nd-':'ns-')+pid;
-  return el('form',{class:'addsub',onsubmit:async e=>{e.preventDefault();e.stopPropagation();const n=e.currentTarget.querySelector('input');const v=n.value.trim();if(!v)return;n.value='';delete n.dataset.dirty;await addTodo({text:v,post_id:pid});}},
+function orphanBlock(list){return el('div',{class:'task ty-autre'},el('div',{class:'task-h'},el('span',{class:'ttype-ro'},'Sans tâche'),el('span',{class:'owner'},'Sous-tâches créées avant la nouvelle organisation')),el('div',{class:'subs2'},list.map(t=>subRow(t))));}
+function taskBlock(k,ctx){
+  const subs=subsOfTask(k.id);const done=subs.filter(isDone).length;const isMeta=k.type==='Pub Meta';
+  const pre=(ctx||'')+k.id;
+  return el('div',{class:'task '+(TYPECLS[k.type]||'ty-autre')},
+    el('div',{class:'task-h'},
+      el('select',{class:'ttype',id:'kt-'+pre,'aria-label':'Type de tâche',onchange:e=>updateTask(k.id,{type:e.target.value})},TYPES.map(t=>el('option',{value:t,selected:t===k.type?true:null},t))),
+      el('input',{type:'text',class:'ktxt',id:'kx-'+pre,value:k.text||'',placeholder:'Intitulé de la tâche','aria-label':'Tâche',onkeydown:enterBlur,oninput:e=>{e.target.dataset.dirty='1';},
+        onchange:e=>{const v=e.target.value.trim();delete e.target.dataset.dirty;if(v!==(k.text||''))updateTask(k.id,{text:v});}}),
+      el('span',{class:'tcount'},subs.length?`${done}/${subs.length}`:''),
+      el('button',{class:'x',type:'button','aria-label':'Supprimer la tâche et ses sous-tâches',title:'Supprimer la tâche et ses sous-tâches',onclick:e=>delInline(e.currentTarget,()=>removeTask(k.id))},'×')),
+    isMeta?el('div',{class:'st-meta on'},
+      el('span',{class:'metachk'},'Diffusion'),
+      el('label',{class:'mf'},'Du',el('input',{type:'date',id:'ms-'+pre,value:k.meta_start||'','aria-label':'Début de diffusion',onkeydown:enterBlur,
+        onchange:e=>{const v=e.target.value||null;if(v===k.meta_start)return;const patch={meta_start:v};if(v&&k.meta_end&&k.meta_end<v)patch.meta_end=v;updateTask(k.id,patch);}})),
+      el('label',{class:'mf'},'au',el('input',{type:'date',id:'me2-'+pre,value:k.meta_end||'',min:k.meta_start||null,'aria-label':'Fin de diffusion',onkeydown:enterBlur,
+        onchange:e=>{const v=e.target.value||null;if(v&&k.meta_start&&v<k.meta_start){toast('La fin doit être après le début');e.target.value=k.meta_end||'';return;}if(v!==k.meta_end)updateTask(k.id,{meta_end:v});}})),
+      el('label',{class:'mf'},'Budget',el('input',{type:'number',id:'mb-'+pre,min:'0',step:'1',inputmode:'decimal',value:k.meta_budget??'',placeholder:'0','aria-label':'Budget Meta en euros',onkeydown:enterBlur,oninput:e=>{e.target.dataset.dirty='1';},
+        onchange:e=>{delete e.target.dataset.dirty;const raw=e.target.value.replace(',','.');const v=raw===''?null:Math.max(0,Number(raw));if(raw!==''&&isNaN(v)){e.target.value=k.meta_budget??'';return;}if(v!==(k.meta_budget==null?null:Number(k.meta_budget)))updateTask(k.id,{meta_budget:v});}}),'€'),
+      (k.meta_start&&k.meta_end)?el('span',{class:'owner'},`${dayCount(k.meta_start,k.meta_end)} j`+(k.meta_budget?` · ${eur(k.meta_budget/dayCount(k.meta_start,k.meta_end))}/j`:'')):null):null,
+    el('div',{class:'subs2'},subs.map(t=>subRow(t)),addSubForm(k,ctx)));
+}
+function addTaskForm(pid,ctx){
+  const id=(ctx||'')+'nk-'+pid;
+  return el('form',{class:'addtask',onsubmit:async e=>{e.preventDefault();e.stopPropagation();const f=e.currentTarget;const n=f.querySelector('input');const ty=f.querySelector('select').value;const v=n.value.trim();
+      n.value='';delete n.dataset.dirty;await addTask({post_id:pid,type:ty,text:v||ty});}},
+    el('select',{id:id+'-t','aria-label':'Type de la nouvelle tâche'},TYPES.map(t=>el('option',{value:t},t))),
+    el('input',{type:'text',id,placeholder:'+ Nouvelle tâche (ex. Newsletter lancement)','aria-label':'Nouvelle tâche',oninput:e=>{e.target.dataset.dirty='1';}}),
+    el('button',{class:'btn',type:'submit'},'Ajouter la tâche'));
+}
+function addSubForm(k,ctx){
+  const id=(ctx||'')+'ns-'+k.id;
+  return el('form',{class:'addsub',onsubmit:async e=>{e.preventDefault();e.stopPropagation();const n=e.currentTarget.querySelector('input');const v=n.value.trim();if(!v)return;n.value='';delete n.dataset.dirty;await addTodo({text:v,task_id:k.id,post_id:k.post_id});}},
     el('input',{type:'text',id,placeholder:'+ Ajouter une sous-tâche','aria-label':'Nouvelle sous-tâche',oninput:e=>{e.target.dataset.dirty='1';}}),
     el('button',{class:'btn',type:'submit'},'Ajouter'));
 }
-function subRow(t,showPost){
-  const st=tStat(t);const t0=iso(today());const isMeta=!!t.meta;
+function subRow(t,showCtx){
+  const st=tStat(t);const t0=iso(today());
   const late=!isDone(t)&&t.due&&t.due<t0;
-  const enter=e=>{if(e.key==='Enter'){e.preventDefault();e.target.blur();}};
-  const p=showPost&&t.post_id?S.posts.get(t.post_id):null;
+  const k=showCtx&&t.task_id?S.tasks.get(t.task_id):null;const p=showCtx&&t.post_id?S.posts.get(t.post_id):null;
   return el('div',{class:'st '+TKEY[st]},
     el('select',{class:'status '+TCLS[st],id:'ss-'+t.id,'aria-label':'Statut',onchange:e=>updateTodo(t.id,{statut:e.target.value})},TSTAT.map(s=>el('option',{value:s,selected:s===st?true:null},s))),
-    el('input',{type:'text',class:'txt',id:'sx-'+t.id,value:t.text||'','aria-label':'Sous-tâche',onkeydown:enter,oninput:e=>{e.target.dataset.dirty='1';},
+    el('input',{type:'text',class:'txt',id:'sx-'+t.id,value:t.text||'','aria-label':'Sous-tâche',onkeydown:enterBlur,oninput:e=>{e.target.dataset.dirty='1';},
       onchange:e=>{const v=e.target.value.trim();delete e.target.dataset.dirty;if(!v){e.target.value=t.text;return;}if(v!==t.text)updateTodo(t.id,{text:v});}}),
-    memberSelect('sa-'+t.id,t.assignee_id,'Responsable',{class:'who-in',onchange:e=>updateTodo(t.id,{assignee_id:e.target.value||null})}),
-    isMeta?el('span',{class:'due-in metapill',title:'Pub Meta : dates de diffusion ci-dessous'},'Pub Meta'):
-    el('input',{type:'date',class:'due-in'+(late?' late':''),id:'sd-'+t.id,value:t.due||'','aria-label':'Échéance',title:late?'En retard':'Échéance',onkeydown:enter,
+    memberSelect('sa-'+t.id,t.assignee_id,'Personne',{class:'who-in',onchange:e=>updateTodo(t.id,{assignee_id:e.target.value||null})}),
+    el('input',{type:'date',class:'due-in'+(late?' late':''),id:'sd-'+t.id,value:t.due||'','aria-label':'Date',title:late?'En retard':'Date',onkeydown:enterBlur,
       onchange:e=>{const v=e.target.value||null;if(v!==t.due)updateTodo(t.id,{due:v});}}),
     el('button',{class:'x',type:'button','aria-label':'Supprimer la sous-tâche',title:'Supprimer',onclick:e=>delInline(e.currentTarget,()=>removeTodo(t.id))},'×'),
     el('div',{class:'st-more'},
-      el('input',{type:'text',class:'fmt',id:'sf-'+t.id,value:t.format||'',placeholder:'Format (Reel, carrousel, story…)','aria-label':'Format',onkeydown:enter,oninput:e=>{e.target.dataset.dirty='1';},
+      el('input',{type:'text',class:'fmt',id:'sf-'+t.id,value:t.format||'',placeholder:'Format (Reel, carrousel, story…)','aria-label':'Format',onkeydown:enterBlur,oninput:e=>{e.target.dataset.dirty='1';},
         onchange:e=>{const v=e.target.value.trim();delete e.target.dataset.dirty;if(v!==(t.format||''))updateTodo(t.id,{format:v});}}),
-      autoGrow(el('textarea',{class:'cnt',id:'sc-'+t.id,rows:'1',placeholder:'Contenu (texte, légende, brief, liens…)','aria-label':'Contenu',oninput:e=>{e.target.dataset.dirty='1';fit(e.target);},
+      autoGrow(el('textarea',{class:'cnt',id:'sc-'+t.id,rows:'1',placeholder:'Brief','aria-label':'Brief',oninput:e=>{e.target.dataset.dirty='1';fit(e.target);},
         onchange:e=>{const v=e.target.value.trim();delete e.target.dataset.dirty;if(v!==(t.contenu||''))updateTodo(t.id,{contenu:v});}}),t.contenu||'')),
-    el('div',{class:'st-meta'+(isMeta?' on':'')},
-      el('label',{class:'metachk'},el('input',{type:'checkbox',id:'sm-'+t.id,checked:isMeta?true:null,onchange:e=>updateTodo(t.id,{meta:e.target.checked})}),'Pub Meta'),
-      isMeta?[
-        el('label',{class:'mf'},'Du',el('input',{type:'date',id:'ms-'+t.id,value:t.meta_start||'','aria-label':'Début de diffusion',onkeydown:enter,
-          onchange:e=>{const v=e.target.value||null;if(v===t.meta_start)return;const patch={meta_start:v,due:v};if(v&&t.meta_end&&t.meta_end<v)patch.meta_end=v;updateTodo(t.id,patch);}})),
-        el('label',{class:'mf'},'au',el('input',{type:'date',id:'me2-'+t.id,value:t.meta_end||'',min:t.meta_start||null,'aria-label':'Fin de diffusion',onkeydown:enter,
-          onchange:e=>{let v=e.target.value||null;if(v&&t.meta_start&&v<t.meta_start){toast('La fin doit être après le début');e.target.value=t.meta_end||'';return;}if(v!==t.meta_end)updateTodo(t.id,{meta_end:v});}})),
-        el('label',{class:'mf'},'Budget',el('input',{type:'number',id:'mb-'+t.id,min:'0',step:'1',inputmode:'decimal',value:t.meta_budget??'',placeholder:'0','aria-label':'Budget Meta en euros',onkeydown:enter,oninput:e=>{e.target.dataset.dirty='1';},
-          onchange:e=>{delete e.target.dataset.dirty;const raw=e.target.value.replace(',','.');const v=raw===''?null:Math.max(0,Number(raw));if(raw!==''&&isNaN(v)){e.target.value=t.meta_budget??'';return;}if(v!==(t.meta_budget==null?null:Number(t.meta_budget)))updateTodo(t.id,{meta_budget:v});}}),'€'),
-        (t.meta_start&&t.meta_end)?el('span',{class:'owner'},`${dayCount(t.meta_start,t.meta_end)} j`+(t.meta_budget?` · ${eur(t.meta_budget/dayCount(t.meta_start,t.meta_end))}/j`:'')):null
-      ]:null),
-    p?el('button',{class:'postlink',type:'button',onclick:()=>openPost(p.id)},'↳ '+(p.date?fmtShort(pd(p.date))+' · ':'')+(p.title||'thématique')):null);
+    (k||p)?el('button',{class:'postlink',type:'button',onclick:()=>p?openPost(p.id):null},'↳ '+(p?(p.date?fmtShort(pd(p.date))+' · ':'')+(p.title||'thématique'):'')+(k?' › '+(k.text||k.type):'')):null);
 }
 function fit(ta){ta.style.height='auto';ta.style.height=(ta.scrollHeight+2)+'px';}
 function autoGrow(ta,val){ta.value=val;requestAnimationFrame(()=>fit(ta));return ta;}
@@ -227,85 +250,134 @@ function renderMonth(){
   return box;
 }
 
-/* ---------- planning & budget Meta ---------- */
+/* ---------- plannings & résultats ---------- */
 function metaMonths(c){const out=[];if(!c.meta_start)return out;const e=c.meta_end||c.meta_start;let d=new Date(pd(c.meta_start).getFullYear(),pd(c.meta_start).getMonth(),1);const end=pd(e);while(d<=end){out.push(iso(d).slice(0,7));d=new Date(d.getFullYear(),d.getMonth()+1,1);}return out;}
 // part du budget qui tombe dans [from,to] (au prorata des jours de diffusion)
 function budgetIn(c,from,to){if(!c.meta_budget||!c.meta_start)return 0;const s0=c.meta_start,e0=c.meta_end||c.meta_start;const s1=s0>from?s0:from,e1=e0<to?e0:to;if(e1<s1)return 0;return Number(c.meta_budget)*dayCount(s1,e1)/dayCount(s0,e0);}
 const monthBounds=k=>{const[y,m]=k.split('-').map(Number);return [iso(new Date(y,m-1,1)),iso(new Date(y,m,0))];};
-function renderMeta(){
+const num=v=>(v===null||v===undefined||v==='')?null:Number(v);
+const fmtN=n=>n==null||isNaN(n)?'—':Number(n).toLocaleString('fr-FR',{maximumFractionDigits:0});
+const fmtPct=n=>n==null||!isFinite(n)?'—':n.toLocaleString('fr-FR',{maximumFractionDigits:1})+' %';
+const fmtX=n=>n==null||!isFinite(n)?'—':n.toLocaleString('fr-FR',{maximumFractionDigits:2});
+const RES={
+  'Pub Meta':[['spend','Dépensé (€)'],['impressions','Impressions'],['reach','Couverture'],['clicks','Clics'],['purchases','Achats'],['revenue','CA (€)']],
+  'Newsletter':[['sent','Envois'],['open_rate','Ouverture (%)'],['click_rate','Clics (%)'],['unsubs','Désinscrits'],['revenue','CA (€)']],
+  'Post Insta':[['reach','Portée'],['impressions','Impressions'],['likes','J’aime'],['comments','Comment.'],['shares','Partages'],['saves','Enreg.']]};
+function resInput(k,key,label){
+  const v=k.results?.[key];
+  return el('input',{type:'number',class:'rin',id:'r-'+k.id+'-'+key,min:'0',step:'any',inputmode:'decimal',value:v??'','aria-label':label+' · '+(k.text||k.type),onkeydown:enterBlur,oninput:e=>{e.target.dataset.dirty='1';},
+    onchange:e=>{delete e.target.dataset.dirty;const raw=e.target.value.replace(',','.');const val=raw===''?null:Number(raw);if(raw!==''&&(isNaN(val)||val<0)){e.target.value=v??'';return;}
+      const cur=S.tasks.get(k.id)?.results||{};const next={...cur};if(val==null)delete next[key];else next[key]=val;updateTask(k.id,{results:next},true);}});
+}
+const themeOf=k=>k.post_id?S.posts.get(k.post_id):null;
+const kDate=k=>themeOf(k)?.date||null;
+function renderResults(){
   const box=el('div',{class:'todo-layout'});
-  const all=[...S.todos.values()].filter(t=>t.meta);
-  const keys=[...new Set(all.flatMap(metaMonths))].sort();
+  const all=[...S.tasks.values()];
+  const metas=all.filter(k=>k.type==='Pub Meta'),nls=all.filter(k=>k.type==='Newsletter'),instas=all.filter(k=>k.type==='Post Insta');
+  const keys=[...new Set([...metas.flatMap(metaMonths),...[...nls,...instas].map(kDate).filter(Boolean).map(d=>d.slice(0,7))])].sort();
   const nowKey=iso(today()).slice(0,7);
   if(S.metaMonth==null||(S.metaMonth!=='all'&&!keys.includes(S.metaMonth)))S.metaMonth=keys.includes(nowKey)?nowKey:(keys.find(k=>k>nowKey)||'all');
   box.append(el('div',{class:'months'},
     el('button',{class:'chip','aria-pressed':String(S.metaMonth==='all'),onclick:()=>{S.metaMonth='all';render();}},'Toute la campagne'),
     ...keys.map(k=>el('button',{class:'chip','aria-pressed':String(S.metaMonth===k),onclick:()=>{S.metaMonth=k;render();}},monthLabel(k)))));
-  if(!all.length){box.append(el('div',{class:'empty'},'Aucune pub Meta pour l’instant. Coche « Pub Meta » sur une sous-tâche, puis renseigne ses dates et son budget.'));return box;}
-  const dated=all.filter(t=>t.meta_start);const undated=all.filter(t=>!t.meta_start||!t.meta_end);
+  box.append(metaSection(metas,keys),nlSection(nls),instaSection(instas));
+  return box;
+}
+function inMonth(k){if(S.metaMonth==='all')return true;const d=kDate(k);return !!d&&d.startsWith(S.metaMonth);}
+function sectionHead(title,sub){return el('div',{class:'sec-h'},el('h2',{},title),sub?el('span',{class:'owner'},sub):null);}
+function openTheme(k){const p=themeOf(k);if(p)openPost(p.id);}
+function themeCell(k){const p=themeOf(k);return el('td',{},el('button',{class:'linkbtn',type:'button',onclick:()=>openTheme(k)},p?p.title:'—'));}
+
+function metaSection(all,keys){
+  const sec=el('section',{class:'rsec'});
+  sec.append(sectionHead('Pubs Meta','Planning, budget et résultats'));
+  if(!all.length){sec.append(el('div',{class:'empty'},'Aucune pub Meta. Ajoute une tâche de type « Pub Meta » dans une thématique, avec ses dates et son budget.'));return sec;}
+  const dated=all.filter(k=>k.meta_start);const incomplete=all.filter(k=>!k.meta_start||!k.meta_end||!k.meta_budget);
   let from,to;
-  if(S.metaMonth==='all'){from=dated.reduce((m,t)=>t.meta_start<m?t.meta_start:m,'9999-12-31');to=dated.reduce((m,t)=>{const e=t.meta_end||t.meta_start;return e>m?e:m;},'0000-01-01');}
+  if(S.metaMonth==='all'){from=dated.reduce((m,k)=>k.meta_start<m?k.meta_start:m,'9999-12-31');to=dated.reduce((m,k)=>{const e=k.meta_end||k.meta_start;return e>m?e:m;},'0000-01-01');}
   else [from,to]=monthBounds(S.metaMonth);
-  const inPeriod=dated.filter(t=>(t.meta_end||t.meta_start)>=from&&t.meta_start<=to).sort((a,b)=>a.meta_start.localeCompare(b.meta_start)||(a.meta_end||'').localeCompare(b.meta_end||''));
-  const total=inPeriod.reduce((s,t)=>s+budgetIn(t,from,to),0);
-  const t0=iso(today());
-  const live=dated.filter(t=>t.meta_start<=t0&&(t.meta_end||t.meta_start)>=t0);
-  const noBudget=all.filter(t=>!t.meta_budget).length;
-  box.append(el('div',{class:'kpis'},
+  const inPeriod=dated.filter(k=>(k.meta_end||k.meta_start)>=from&&k.meta_start<=to).sort((a,b)=>a.meta_start.localeCompare(b.meta_start)||(a.meta_end||'').localeCompare(b.meta_end||''));
+  const total=inPeriod.reduce((s,k)=>s+budgetIn(k,from,to),0);
+  const t0=iso(today());const live=dated.filter(k=>k.meta_start<=t0&&(k.meta_end||k.meta_start)>=t0);
+  const rows=[...new Set([...inPeriod,...(S.metaMonth==='all'?all.filter(k=>!k.meta_start):[])])];
+  const sum=key=>rows.reduce((s,k)=>s+(num(k.results?.[key])||0),0);
+  const spend=sum('spend'),rev=sum('revenue');
+  sec.append(el('div',{class:'kpis'},
     el('div',{class:'kpi'},el('span',{},S.metaMonth==='all'?'Budget total':'Budget '+monthLabel(S.metaMonth)),el('b',{},eur(total)),el('small',{},S.metaMonth==='all'?'toutes les pubs datées':'au prorata des jours diffusés ce mois')),
-    el('div',{class:'kpi'},el('span',{},'Pubs sur la période'),el('b',{},String(inPeriod.length)),el('small',{},`${all.length} pub${all.length>1?'s':''} Meta au total`)),
-    el('div',{class:'kpi'},el('span',{},'En diffusion aujourd’hui'),el('b',{},String(live.length)),el('small',{},live.length?eur(live.reduce((s,t)=>s+budgetIn(t,t0,t0),0))+' / jour':'aucune')),
-    el('div',{class:'kpi'+(undated.length||noBudget?' warn':'')},el('span',{},'À compléter'),el('b',{},String(all.filter(t=>!t.meta_start||!t.meta_end||!t.meta_budget).length)),el('small',{},`${undated.length} sans dates · ${noBudget} sans budget`))));
-  // frise
+    el('div',{class:'kpi'},el('span',{},'Dépensé (saisi)'),el('b',{},eur(spend)),el('small',{},`${inPeriod.length} pub${inPeriod.length>1?'s':''} sur la période`)),
+    el('div',{class:'kpi'},el('span',{},'ROAS'),el('b',{},spend?fmtX(rev/spend):'—'),el('small',{},`CA ${eur(rev)} · en diffusion aujourd’hui : ${live.length}`)),
+    el('div',{class:'kpi'+(incomplete.length?' warn':'')},el('span',{},'À compléter'),el('b',{},String(incomplete.length)),el('small',{},'pubs sans dates complètes ou sans budget'))));
   if(inPeriod.length){
-    const span=dayCount(from,to);
-    const pct=d=>(dayCount(from,d)-1)/span*100;
-    const ticks=[];
+    const span=dayCount(from,to);const pct=d=>(dayCount(from,d)-1)/span*100;const ticks=[];
     if(S.metaMonth==='all'){for(const k of keys){const[a]=monthBounds(k);if(a>=from&&a<=to)ticks.push([pct(a),MONTHS[+k.slice(5)-1].slice(0,4)+'.']);}}
     else{const n=dayCount(from,to);for(let i=1;i<=n;i+=(i===1?4:5)){const d=new Date(pd(from));d.setDate(i);ticks.push([pct(iso(d)),String(i)]);}}
-    const gantt=el('div',{class:'gantt'},
-      el('div',{class:'g-row g-head'},el('div',{class:'g-lab'}),el('div',{class:'g-track'},ticks.map(([x,l])=>el('span',{class:'g-tick',style:`left:${x}%`},l)),(t0>=from&&t0<=to)?el('span',{class:'g-today',style:`left:${pct(t0)}%`,title:'Aujourd’hui'}):null),el('div',{class:'g-val'})));
-    for(const t of inPeriod){
-      const p=t.post_id?S.posts.get(t.post_id):null;
-      const s1=t.meta_start>from?t.meta_start:from;const e0=t.meta_end||t.meta_start;const e1=e0<to?e0:to;
-      const left=pct(s1),width=Math.max(dayCount(s1,e1)/span*100,1.2);
-      gantt.append(el('button',{class:'g-row',type:'button',onclick:()=>p?openPost(p.id):null,title:`${t.text} · ${fmtShort(pd(t.meta_start))} → ${fmtShort(pd(e0))}`},
-        el('div',{class:'g-lab'},el('b',{},t.text),el('small',{},p?p.title:'Sans thématique')),
-        el('div',{class:'g-track'},el('span',{class:'g-bar'+(isDone(t)?' done':'')+(t.meta_end?'':' open'),style:`left:${left}%;width:${width}%`},`${fmtShort(pd(t.meta_start))} → ${t.meta_end?fmtShort(pd(t.meta_end)):'?'}`),(t0>=from&&t0<=to)?el('span',{class:'g-today',style:`left:${pct(t0)}%`}):null),
-        el('div',{class:'g-val'},t.meta_budget?eur(budgetIn(t,from,to)):el('span',{class:'owner'},'—'))));
+    const today_=(t0>=from&&t0<=to)?()=>el('span',{class:'g-today',style:`left:${pct(t0)}%`}):()=>null;
+    const g=el('div',{class:'gantt'},el('div',{class:'g-row g-head'},el('div',{class:'g-lab'}),el('div',{class:'g-track'},ticks.map(([x,l])=>el('span',{class:'g-tick',style:`left:${x}%`},l)),today_()),el('div',{class:'g-val'})));
+    for(const k of inPeriod){
+      const p=themeOf(k);const e0=k.meta_end||k.meta_start;const s1=k.meta_start>from?k.meta_start:from;const e1=e0<to?e0:to;
+      g.append(el('button',{class:'g-row',type:'button',onclick:()=>openTheme(k),title:`${k.text} · ${fmtShort(pd(k.meta_start))} → ${fmtShort(pd(e0))}`},
+        el('div',{class:'g-lab'},el('b',{},k.text||'Pub Meta'),el('small',{},p?p.title:'Sans thématique')),
+        el('div',{class:'g-track'},el('span',{class:'g-bar'+(k.meta_end?'':' open'),style:`left:${pct(s1)}%;width:${Math.max(dayCount(s1,e1)/span*100,1.2)}%`},`${fmtShort(pd(k.meta_start))} → ${k.meta_end?fmtShort(pd(k.meta_end)):'?'}`),today_()),
+        el('div',{class:'g-val'},k.meta_budget?eur(budgetIn(k,from,to)):el('span',{class:'owner'},'—'))));
     }
-    box.append(el('div',{class:'gantt-wrap'},gantt));
-  }else box.append(el('div',{class:'empty'},'Aucune pub Meta en diffusion sur cette période.'));
-  // tableau détaillé
-  const rows=[...new Set([...inPeriod,...(S.metaMonth==='all'?undated:[])])];
+    sec.append(el('div',{class:'gantt-wrap'},g));
+  }
   if(rows.length){
-    const tbl=el('table',{class:'mtable'},
-      el('thead',{},el('tr',{},...['Thématique','Pub','Format','Du','Au','Jours','Budget','€ / jour','Responsable','Statut'].map(h=>el('th',{},h)))),
-      el('tbody',{},rows.map(t=>{const p=t.post_id?S.posts.get(t.post_id):null;const n=(t.meta_start&&t.meta_end)?dayCount(t.meta_start,t.meta_end):null;
-        return el('tr',{onclick:()=>p?openPost(p.id):null,style:p?'cursor:pointer':''},
-          el('td',{},p?p.title:'—'),el('td',{class:'strong'},t.text),el('td',{},t.format||''),
-          el('td',{},t.meta_start?fmtShort(pd(t.meta_start)):el('span',{class:'late'},'à définir')),el('td',{},t.meta_end?fmtShort(pd(t.meta_end)):el('span',{class:'late'},'à définir')),
-          el('td',{class:'num'},n??'—'),el('td',{class:'num'},t.meta_budget?eur(t.meta_budget):el('span',{class:'late'},'—')),
-          el('td',{class:'num'},(n&&t.meta_budget)?eur(t.meta_budget/n):'—'),el('td',{},mName(t.assignee_id)),el('td',{},el('span',{class:'status '+TCLS[tStat(t)]},tStat(t))));})),
-      el('tfoot',{},el('tr',{},el('td',{colspan:'6'},'Total des budgets'+(S.metaMonth==='all'?'':' (campagnes entières)')),el('td',{class:'num'},eur(rows.reduce((s,t)=>s+(Number(t.meta_budget)||0),0))),el('td',{colspan:'3'}))));
-    box.append(el('div',{class:'mtable-wrap'},tbl));
+    const head=['Thématique','Pub','Du','Au','Budget',...RES['Pub Meta'].map(r=>r[1]),'CTR','CPC','ROAS'];
+    sec.append(el('div',{class:'mtable-wrap'},el('table',{class:'mtable rtable'},
+      el('thead',{},el('tr',{},head.map((h,i)=>el('th',{class:i>=4?'num':''},h)))),
+      el('tbody',{},rows.map(k=>{const r=k.results||{};const ctr=num(r.impressions)?num(r.clicks)/num(r.impressions)*100:null;const cpc=num(r.clicks)?num(r.spend)/num(r.clicks):null;const roas=num(r.spend)?num(r.revenue)/num(r.spend):null;
+        return el('tr',{},themeCell(k),el('td',{class:'strong'},k.text||'Pub Meta'),
+          el('td',{},k.meta_start?fmtShort(pd(k.meta_start)):el('span',{class:'late'},'à définir')),el('td',{},k.meta_end?fmtShort(pd(k.meta_end)):el('span',{class:'late'},'à définir')),
+          el('td',{class:'num'},k.meta_budget?eur(k.meta_budget):el('span',{class:'late'},'—')),
+          ...RES['Pub Meta'].map(([key,l])=>el('td',{class:'num'},resInput(k,key,l))),
+          el('td',{class:'num'},fmtPct(ctr)),el('td',{class:'num'},cpc==null||!isFinite(cpc)?'—':eur2(cpc)),el('td',{class:'num'},fmtX(roas)));})),
+      el('tfoot',{},el('tr',{},el('td',{colspan:'4'},'Total'),el('td',{class:'num'},eur(rows.reduce((s,k)=>s+(Number(k.meta_budget)||0),0))),
+        ...RES['Pub Meta'].map(([key])=>el('td',{class:'num'},key==='spend'||key==='revenue'?eur(sum(key)):fmtN(sum(key)))),
+        el('td',{class:'num'},sum('impressions')?fmtPct(sum('clicks')/sum('impressions')*100):'—'),el('td',{class:'num'},sum('clicks')?eur2(spend/sum('clicks')):'—'),el('td',{class:'num'},spend?fmtX(rev/spend):'—'))))));
   }
-  // répartition mensuelle
-  if(S.metaMonth==='all'&&keys.length){
-    box.append(el('div',{class:'mtable-wrap'},el('table',{class:'mtable'},
+  if(S.metaMonth==='all'&&keys.length&&dated.length){
+    sec.append(el('div',{class:'mtable-wrap'},el('table',{class:'mtable'},
       el('thead',{},el('tr',{},el('th',{},'Mois'),el('th',{class:'num'},'Budget Meta (au prorata des jours)'))),
-      el('tbody',{},keys.map(k=>{const[a,b]=monthBounds(k);return el('tr',{onclick:()=>{S.metaMonth=k;render();},style:'cursor:pointer'},el('td',{},monthLabel(k)),el('td',{class:'num'},eur(dated.reduce((s,t)=>s+budgetIn(t,a,b),0))));})))));
+      el('tbody',{},keys.map(k=>{const[a,b]=monthBounds(k);const v=dated.reduce((s,c)=>s+budgetIn(c,a,b),0);return v?el('tr',{onclick:()=>{S.metaMonth=k;render();},style:'cursor:pointer'},el('td',{},monthLabel(k)),el('td',{class:'num'},eur(v))):null;})))));
   }
-  return box;
+  return sec;
+}
+const eur2=n=>(Number(n)||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2});
+function simpleSection(type,title,sub,list,extra){
+  const sec=el('section',{class:'rsec'});
+  sec.append(sectionHead(title,sub));
+  const rows=list.filter(inMonth).sort((a,b)=>(kDate(a)||'9999').localeCompare(kDate(b)||'9999'));
+  if(!rows.length){sec.append(el('div',{class:'empty'},list.length?'Rien sur cette période.':`Aucune tâche de type « ${type} » pour l’instant.`));return sec;}
+  const cols=RES[type];
+  const sum=key=>rows.reduce((s,k)=>s+(num(k.results?.[key])||0),0);
+  sec.append(el('div',{class:'mtable-wrap'},el('table',{class:'mtable rtable'},
+    el('thead',{},el('tr',{},el('th',{},'Thématique'),el('th',{},type),el('th',{},'Date'),...cols.map(c=>el('th',{class:'num'},c[1])),...extra.map(x=>el('th',{class:'num'},x.label)))),
+    el('tbody',{},rows.map(k=>{const d=kDate(k);return el('tr',{},themeCell(k),el('td',{class:'strong'},k.text||type),el('td',{},d?fmtShort(pd(d)):'—'),
+      ...cols.map(([key,l])=>el('td',{class:'num'},resInput(k,key,l))),...extra.map(x=>el('td',{class:'num'},x.row(k.results||{}))));})),
+    el('tfoot',{},el('tr',{},el('td',{colspan:'3'},`Total · ${rows.length}`),...cols.map(([key])=>el('td',{class:'num'},x_total(type,key,rows,sum))),...extra.map(x=>el('td',{class:'num'},x.total(rows,sum))))))));
+  return sec;
+}
+function x_total(type,key,rows,sum){
+  if(key.endsWith('_rate')){const w=rows.filter(k=>num(k.results?.[key])!=null);if(!w.length)return '—';const sw=w.reduce((s,k)=>s+(num(k.results?.sent)||0),0);
+    return sw?fmtPct(w.reduce((s,k)=>s+num(k.results[key])*(num(k.results?.sent)||0),0)/sw)+' moy.':fmtPct(w.reduce((s,k)=>s+num(k.results[key]),0)/w.length)+' moy.';}
+  return key==='revenue'?eur(sum(key)):fmtN(sum(key));
+}
+function nlSection(list){return simpleSection('Newsletter','Newsletters','Date = date de la thématique · taux en %',list,[]);}
+function instaSection(list){
+  const eng=r=>{const reach=num(r.reach);if(!reach)return null;return ((num(r.likes)||0)+(num(r.comments)||0)+(num(r.shares)||0)+(num(r.saves)||0))/reach*100;};
+  return simpleSection('Post Insta','Publications Instagram','Engagement = (j’aime + commentaires + partages + enregistrements) / portée',list,
+    [{label:'Engagement',row:r=>fmtPct(eng(r)),total:(rows,sum)=>sum('reach')?fmtPct((sum('likes')+sum('comments')+sum('shares')+sum('saves'))/sum('reach')*100):'—'}]);
 }
 
 /* ---------- to-do ---------- */
 function renderTodos(){
   const box=el('div',{class:'todo-layout'});
-  const postSel=el('select',{id:'tPost','aria-label':'Thématique liée'},el('option',{value:''},'Aucune thématique'),...postOptions());
+  const postSel=el('select',{id:'tPost','aria-label':'Tâche parente'},el('option',{value:''},'Sans tâche parente'),...taskOptions());
   box.append(el('form',{class:'addbar',onsubmit:async e=>{e.preventDefault();
       const text=$('#tText').value.trim();if(!text)return;
-      await addTodo({text,assignee_id:$('#tAss').value||null,due:$('#tDue').value||null,post_id:postSel.value||null});
+      const k=postSel.value?S.tasks.get(postSel.value):null;await addTodo({text,assignee_id:$('#tAss').value||null,due:$('#tDue').value||null,task_id:k?k.id:null,post_id:k?k.post_id:null});
       $('#tText').value='';$('#tText').focus();}},
     el('input',{type:'text',id:'tText',placeholder:'Nouvelle tâche…','aria-label':'Tâche'}),
     memberSelect('tAss','', 'Responsable'),
@@ -313,7 +385,7 @@ function renderTodos(){
     postSel,
     el('button',{class:'btn primary',type:'submit'},'Ajouter')));
   box.append(el('div',{class:'filters'},
-    ...[['open','Ouvertes'],['En cours','En cours'],['Bloqué','Bloquées'],['Fait','Faites'],['all','Toutes']].map(([k,l])=>el('button',{class:'chip','aria-pressed':String(S.todoFilter===k),onclick:()=>{S.todoFilter=k;render();}},l)),
+    ...[['open','Ouvertes'],['En cours','En cours'],['Fait','Faites'],['all','Toutes']].map(([k,l])=>el('button',{class:'chip','aria-pressed':String(S.todoFilter===k),onclick:()=>{S.todoFilter=k;render();}},l)),
     el('span',{style:'width:12px'}),
     el('button',{class:'chip','aria-pressed':String(S.who==='all'),onclick:()=>setWho('all')},'Tout le monde'),
     S.me?el('button',{class:'chip','aria-pressed':String(S.who===S.me.id),onclick:()=>setWho(S.me.id)},'Mes tâches'):null,
@@ -330,6 +402,10 @@ function renderTodos(){
   box.append(ul);return box;
 }
 function setWho(p){S.who=p;try{localStorage.setItem('sc_who',p)}catch(e){}render();}
+function taskOptions(){
+  const groups=new Map();for(const k of S.tasks.values()){const p=k.post_id?S.posts.get(k.post_id):null;const g=p?((p.date?fmtShort(pd(p.date))+' · ':'')+p.title):'Sans thématique';if(!groups.has(g))groups.set(g,{d:p?.date||'9999',items:[]});groups.get(g).items.push(k);}
+  return [...groups.entries()].sort((a,b)=>a[1].d.localeCompare(b[1].d)).map(([g,v])=>el('optgroup',{label:g},v.items.map(k=>el('option',{value:k.id},`${k.type} — ${k.text||''}`))));
+}
 function postOptions(sel){
   return [...S.posts.values()].sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999')).map(p=>el('option',{value:p.id,selected:p.id===sel?true:null},`${p.date?fmtShort(pd(p.date))+' · ':''}${p.title||'Sans titre'}`));
 }
@@ -369,9 +445,9 @@ function openPost(id,presetDate){
   const inp=(idn,val,ph)=>el('input',{type:'text',id:idn,value:val||'',placeholder:ph||''});
   const date=el('input',{type:'date',id:'pDate',value:p.date||''});
     const notes=el('textarea',{id:'pNotes',placeholder:'Notes visibles directement dans la liste : brief, intentions, liens…'});notes.value=p.notes||'';
-  const linked=id?subsFor(id):[];
-  const sub=el('div',{id:'drawerSubs',style:'display:flex;flex-direction:column;gap:6px'},linked.map(t=>subRow(t)));
-  const delBtn=id?el('button',{class:'btn danger',type:'button',onclick:async e=>{const b=e.currentTarget;if(!b.dataset.armed){b.dataset.armed='1';b.textContent='Confirmer (supprime aussi ses sous-tâches)';return;}await removePost(id);closeDrawer();}},'Supprimer'):el('span');
+  const ks=id?tasksFor(id):[];
+  const sub=el('div',{id:'drawerSubs',class:'subs',style:'padding:0'},ks.map(k=>taskBlock(k,'d')));
+  const delBtn=id?el('button',{class:'btn danger',type:'button',onclick:async e=>{const b=e.currentTarget;if(!b.dataset.armed){b.dataset.armed='1';b.textContent='Confirmer (supprime aussi ses tâches)';return;}await removePost(id);closeDrawer();}},'Supprimer'):el('span');
   const form=el('form',{class:'drawer',role:'dialog','aria-modal':'true','aria-label':'Thématique',onsubmit:async e=>{e.preventDefault();
       const data={date:date.value||null,title:$('#pTitle').value.trim(),notes:notes.value.trim()};
       if(!data.title){$('#pTitle').focus();return;}
@@ -380,7 +456,7 @@ function openPost(id,presetDate){
     f('Thématique',inp('pTitle',p.title,'Ex. Boutique de Noël ouverte')),
     f('Date',date),
     f('Notes',notes),
-    id?el('div',{class:'field'},el('label',{},`Sous-tâches (${linked.length})`),sub,addSubForm(id,true)):el('p',{class:'owner'},'Enregistre la thématique pour lui ajouter des sous-tâches.'),
+    id?el('div',{class:'field'},el('label',{},`Tâches (${ks.length})`),sub,addTaskForm(id,'d')):el('p',{class:'owner'},'Enregistre la thématique pour lui ajouter des tâches.'),
     el('div',{class:'actions'},delBtn,el('div',{style:'display:flex;gap:8px'},el('button',{class:'btn ghost',type:'button',onclick:closeDrawer},'Annuler'),el('button',{class:'btn primary',type:'submit'},'Enregistrer'))));
   const ov=el('div',{class:'overlay',onclick:e=>{if(e.target===ov)closeDrawer();}},form);
   $('#drawerHost').replaceChildren(ov);
@@ -390,7 +466,7 @@ function closeDrawer(){S.drawerPost=null;$('#drawerHost').replaceChildren();}
 function refreshDrawerSubs(){
   const box=document.getElementById('drawerSubs');if(!box||!S.drawerPost)return;
   if(box.contains(document.activeElement))return;
-  box.replaceChildren(...subsFor(S.drawerPost).map(t=>subRow(t)));
+  box.replaceChildren(...tasksFor(S.drawerPost).map(k=>taskBlock(k,'d')));
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer();});
 
@@ -400,15 +476,18 @@ async function savePost(id,data){
   const q=id?sb.from('posts').update(data).eq('id',id).select().single():sb.from('posts').insert(data).select().single();
   const {data:row,error}=await q;if(error){fail(error);return false;}
   S.posts.set(row.id,row);render();toast('Thématique enregistrée');return true;}
-async function removePost(id){const {error}=await sb.from('posts').delete().eq('id',id);if(error)return fail(error);S.posts.delete(id);for(const t of [...S.todos.values()])if(t.post_id===id)S.todos.delete(t.id);render();toast('Thématique supprimée');}
-async function addTodo(t){const {data:row,error}=await sb.from('todos').insert(t).select().single();if(error)return fail(error);S.todos.set(row.id,row);render();refreshDrawerSubs();toast('Tâche ajoutée');}
+async function removePost(id){const {error}=await sb.from('posts').delete().eq('id',id);if(error)return fail(error);S.posts.delete(id);for(const k of [...S.tasks.values()])if(k.post_id===id)S.tasks.delete(k.id);for(const t of [...S.todos.values()])if(t.post_id===id)S.todos.delete(t.id);render();toast('Thématique supprimée');}
+async function addTodo(t){const {data:row,error}=await sb.from('todos').insert(t).select().single();if(error)return fail(error);S.todos.set(row.id,row);render();refreshDrawerSubs();toast('Sous-tâche ajoutée');}
 async function updateTodo(id,patch){
   const before=S.todos.get(id);
   const {data:row,error}=await sb.from('todos').update(patch).eq('id',id).select().single();if(error)return fail(error);
   S.todos.set(row.id,row);render();refreshDrawerSubs();
   if(patch.statut==='Fait'&&before?.statut!=='Fait')toast('Fait !');
 }
-async function removeTodo(id){const {error}=await sb.from('todos').delete().eq('id',id);if(error)return fail(error);S.todos.delete(id);render();refreshDrawerSubs();toast('Tâche supprimée');}
+async function removeTodo(id){const {error}=await sb.from('todos').delete().eq('id',id);if(error)return fail(error);S.todos.delete(id);render();refreshDrawerSubs();toast('Sous-tâche supprimée');}
+async function addTask(k){const {data:row,error}=await sb.from('tasks').insert(k).select().single();if(error)return fail(error);S.tasks.set(row.id,row);render();refreshDrawerSubs();toast('Tâche ajoutée');}
+async function updateTask(id,patch,quiet){const {data:row,error}=await sb.from('tasks').update(patch).eq('id',id).select().single();if(error)return fail(error);S.tasks.set(row.id,row);render();refreshDrawerSubs();if(quiet)toast('Résultat enregistré');}
+async function removeTask(id){const {error}=await sb.from('tasks').delete().eq('id',id);if(error)return fail(error);S.tasks.delete(id);for(const t of [...S.todos.values()])if(t.task_id===id)S.todos.delete(t.id);render();refreshDrawerSubs();toast('Tâche supprimée');}
 function showNotice(m){const n=$('#notice');n.textContent=m;n.hidden=false;}
 
 /* ---------- démarrage ---------- */
